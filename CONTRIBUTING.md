@@ -12,6 +12,12 @@ No dependencies to install: the module requires nothing beyond the
 standard library, and `go.mod` should stay that way. A pull request
 that adds a dependency needs to argue for it in the description.
 
+`main` is protected: nobody, including the repo owner, can push to it
+directly. Every change lands through a pull request, and GitHub blocks
+merging until all nine CI jobs — Lint, the six Test combinations,
+Coverage and Cross-compile — report success on the PR's latest commit.
+Push a branch, open the PR, and wait for it to go green before merging.
+
 ## The rules that matter here
 
 **Platform differences go in `internal/platform`, nowhere else.** The
