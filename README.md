@@ -3,9 +3,9 @@
 A focus timer with tasks, habits and project tracking. Ported from the
 Python/Tkinter original.
 
-[![CI](https://github.com/christopherwc/pomodoro/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherwc/pomodoro/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/christopherwc/pomodoro.svg)](https://pkg.go.dev/github.com/christopherwc/pomodoro)
-[![Go Report Card](https://goreportcard.com/badge/github.com/christopherwc/pomodoro)](https://goreportcard.com/report/github.com/christopherwc/pomodoro)
+[![CI](https://github.com/christopherwc/productivio/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherwc/productivio/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/christopherwc/productivio.svg)](https://pkg.go.dev/github.com/christopherwc/productivio)
+[![Go Report Card](https://goreportcard.com/badge/github.com/christopherwc/productivio)](https://goreportcard.com/report/github.com/christopherwc/productivio)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Single static binary. No runtime dependencies, no cgo, nothing to
@@ -58,13 +58,13 @@ for exactly this reason.
 ## Install
 
 ```bash
-go install github.com/christopherwc/pomodoro/cmd/pomodoro@latest
+go install github.com/christopherwc/productivio/cmd/pomodoro@latest
 ```
 
 Or build from a checkout:
 
 ```bash
-git clone https://github.com/christopherwc/pomodoro.git
+git clone https://github.com/christopherwc/productivio.git
 cd pomodoro
 make build       # ./bin/pomodoro
 make install     # into $GOBIN
