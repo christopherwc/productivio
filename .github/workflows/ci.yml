@@ -180,8 +180,10 @@ jobs:
         working-directory: gui
         # Pinned version, not @latest: staticcheck's @latest already
         # broke this CI once by silently requiring a newer Go than the
-        # job had. See the Lint job's staticcheck step.
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+        # job had (see the Lint job's staticcheck step). v1.2.0+ here
+        # requires Go >= 1.25; v1.1.4 is the newest that still builds
+        # with this job's Go 1.23.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
       - run: go vet ./...
         working-directory: gui
