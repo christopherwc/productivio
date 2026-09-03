@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a pinned-version `govulncheck` scan all run in a new `GUI` job; a new
   Dependabot `gomod` entry tracks Fyne's dependency tree. No user-facing
   functionality yet — this is the window/build scaffold only.
+- **`gui/internal/app`** — the Store/Env abstraction the GUI's views are
+  built against, mirroring `internal/cli`'s pattern so views can be
+  tested without touching real files or a real clock.
 
 ## [1.0.0] - 2026-09-03
 
