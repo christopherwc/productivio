@@ -1,7 +1,7 @@
 # Common development tasks. Run `make help` for the list.
 
 BINARY  := pomodoro
-PKG     := github.com/your-username/pomodoro
+PKG     := github.com/christopherwc/pomodoro
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X $(PKG)/internal/cli.Version=$(VERSION)
 

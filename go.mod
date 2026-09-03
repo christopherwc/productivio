@@ -3,6 +3,6 @@
 // There are no external dependencies. The Python original was pure
 // standard library, and keeping that property in Go means the result
 // is a single static binary with nothing to install alongside it.
-module github.com/your-username/pomodoro
+module github.com/christopherwc/pomodoro
 
 go 1.21

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/your-username/pomodoro/internal/core"
+	"github.com/christopherwc/pomodoro/internal/core"
 )
 
 // fixedNow is a Wednesday, pinned so streak, deadline and health output
