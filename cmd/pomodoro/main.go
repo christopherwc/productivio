@@ -19,7 +19,7 @@ package main
 import (
 	"os"
 
-	"github.com/christopherwc/pomodoro/internal/cli"
+	"github.com/christopherwc/productivio/internal/cli"
 )
 
 func main() {
