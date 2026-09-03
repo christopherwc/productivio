@@ -148,10 +148,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # Newer than the CLI's Lint/Test/Cross-compile jobs
-          # (deliberately): govulncheck flags standard-library CVEs
-          # reachable at the toolchain version used to build, and the
-          # fixes for the ones this job found landed in 1.25.
-          go-version: "1.25"
+          # (deliberately), and pinned to an exact patch rather than a
+          # floating minor: govulncheck flags standard-library CVEs
+          # reachable at the toolchain version used to build. "1.25"
+          # resolved to 1.25.12 here, one patch behind the actual
+          # fixes (1.25.13) — pin the current, actively-maintained
+          # 1.26 line instead of chasing 1.25 patches.
+          go-version: "1.26.8"
           cache: false
 
       # Fyne is cgo-linked against GL/X11 even for headless tests.
