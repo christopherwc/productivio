@@ -87,7 +87,7 @@ jobs:
       - name: Test with coverage
         run: go test -coverprofile=coverage-${{ matrix.os }}-${{ matrix.go }}.out ./internal/...
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-${{ matrix.go }}
           path: coverage-*.out
@@ -143,7 +143,7 @@ jobs:
       - name: Build every target
         run: make release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: dist/
