@@ -53,7 +53,9 @@ jobs:
       - name: staticcheck
         uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
-          version: latest
+          # v0.7.0+ requires Go >= 1.25; pin to the newest release that
+          # still builds with this job's Go 1.23.
+          version: v0.6.1
           install-go: false
 
   test:
