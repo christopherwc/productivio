@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later views add tabs to, rather than a single placeholder label.
 - **GUI tasks view.** Add, complete, reorder (up/down) and delete
   tasks, each optionally filed under a project.
+- **GUI projects view.** List, add and complete projects, with health
+  (On track/At risk/Overdue/...) shown as a colored label — the same
+  surface `pomodoro project` exposes; the CLI has no project
+  delete/hold/reopen commands, so neither does this view.
 
 ### Fixed
 
