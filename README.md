@@ -65,7 +65,7 @@ Or build from a checkout:
 
 ```bash
 git clone https://github.com/christopherwc/productivio.git
-cd pomodoro
+cd productivio
 make build       # ./bin/pomodoro
 make install     # into $GOBIN
 ```
@@ -138,6 +138,8 @@ cmd/pomodoro/          main; wires the real environment to the CLI
 internal/core/         model and persistence; no I/O beyond files
 internal/platform/     every Linux/macOS difference, in one place
 internal/cli/          command dispatch and output
+gui/                    the desktop GUI — a separate Go module; see
+                        "Building a graphical version" below
 ```
 
 Three decisions worth knowing before changing anything:
@@ -195,6 +197,14 @@ bumping it is a visible, reviewable diff instead of a silent change.
 The version is kept as a trailing comment purely for humans; Dependabot
 (configured in `.github/dependabot.yml`) reads the SHA, not the
 comment, and opens a PR that updates both when a new release ships.
+
+The same instinct applies to `gui/`'s one exception to the
+zero-dependency policy above: Fyne is pinned to an exact version in
+`gui/go.mod`, `gui/go.sum` is committed and checked with `go mod
+verify`, a pinned-version `govulncheck` scan runs in the `GUI` CI job
+(not `@latest` — a floating version already broke this CI once, see
+the git history), and a second Dependabot entry scoped to `/gui`
+tracks Fyne's dependency tree independently of the Actions one above.
 
 ## Building a graphical version
 

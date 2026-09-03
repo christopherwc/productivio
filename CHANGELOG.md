@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built against, mirroring `internal/cli`'s pattern so views can be
   tested without touching real files or a real clock.
 
+### Fixed
+
+- **Stale post-rename docs.** README and CONTRIBUTING both still said
+  `cd pomodoro` after cloning, left over from before the repo was
+  renamed to `productivio`. CONTRIBUTING also undercounted the
+  required CI checks (nine, not eleven, since the `GUI` jobs were
+  added). README's Layout section and supply-chain-security section
+  now mention `gui/`.
+
 ## [1.0.0] - 2026-09-03
 
 Port of the Python/Tkinter application to Go.
