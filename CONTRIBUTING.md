@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/christopherwc/productivio.git
-cd pomodoro
+cd productivio
 make check     # fmt, vet, race, coverage, lint
 ```
 
@@ -22,9 +22,10 @@ that adds a dependency needs to argue for it in the description.
 
 `main` is protected: nobody, including the repo owner, can push to it
 directly. Every change lands through a pull request, and GitHub blocks
-merging until all nine CI jobs — Lint, the six Test combinations,
-Coverage and Cross-compile — report success on the PR's latest commit.
-Push a branch, open the PR, and wait for it to go green before merging.
+merging until all eleven CI jobs — Lint, the six Test combinations,
+Coverage, Cross-compile and the two GUI jobs — report success on the
+PR's latest commit. Push a branch, open the PR, and wait for it to go
+green before merging.
 
 ## The rules that matter here
 
