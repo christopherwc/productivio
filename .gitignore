@@ -1,0 +1,24 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Test and coverage artefacts
+coverage.out
+coverage.html
+*.test
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# OS cruft
+.DS_Store
+
+# Application data. Written to the platform data directory in normal
+# use, but listed so a stray local run cannot commit real history.
+sessions.json
+tasks.json
+habits.json
+projects.json
