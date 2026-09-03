@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # There are no Go module dependencies to track, so only the actions
+  # ecosystem is watched.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
