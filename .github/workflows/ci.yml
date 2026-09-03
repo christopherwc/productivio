@@ -147,14 +147,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: "1.23"
+          # Newer than the CLI's Lint/Test/Cross-compile jobs
+          # (deliberately): govulncheck flags standard-library CVEs
+          # reachable at the toolchain version used to build, and the
+          # fixes for the ones this job found landed in 1.25.
+          go-version: "1.25"
           cache: false
 
       # Fyne is cgo-linked against GL/X11 even for headless tests.
       # macos-latest already has everything it needs via Xcode CLT.
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+        # xorg-dev + libgl1-mesa-dev alone are not enough: this glfw
+        # version's Wayland backend is compiled in unconditionally and
+        # needs its headers too, even though the CI runner never has a
+        # real display.
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 
       - name: Check formatting
         working-directory: gui
@@ -180,10 +188,8 @@ jobs:
         working-directory: gui
         # Pinned version, not @latest: staticcheck's @latest already
         # broke this CI once by silently requiring a newer Go than the
-        # job had (see the Lint job's staticcheck step). v1.2.0+ here
-        # requires Go >= 1.25; v1.1.4 is the newest that still builds
-        # with this job's Go 1.23.
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        # job had (see the Lint job's staticcheck step).
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 
       - run: go vet ./...
         working-directory: gui

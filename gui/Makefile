@@ -8,9 +8,8 @@ PKG     := github.com/christopherwc/productivio/gui
 VERSION := $(shell git -C .. describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w
 
-# v1.2.0+ requires Go >= 1.25; pin to the newest release that still
-# builds with this module's CI Go version (1.23).
-GOVULNCHECK_VERSION := v1.1.4
+# Pinned, not @latest — see the vulncheck target below.
+GOVULNCHECK_VERSION := v1.7.0
 
 export CGO_ENABLED := 1
 
