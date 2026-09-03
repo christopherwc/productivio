@@ -2,15 +2,19 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2/test"
+
+	"github.com/christopherwc/productivio/gui/internal/app"
 )
 
 func TestNewWindow(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
 
-	w := NewWindow(a)
+	env := &app.Env{Now: func() time.Time { return time.Now() }}
+	w := NewWindow(a, env)
 	defer w.Close()
 
 	if got, want := w.Title(), "Pomodoro"; got != want {
