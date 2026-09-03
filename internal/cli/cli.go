@@ -15,8 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/your-username/pomodoro/internal/core"
-	"github.com/your-username/pomodoro/internal/platform"
+	"github.com/christopherwc/pomodoro/internal/core"
+	"github.com/christopherwc/pomodoro/internal/platform"
 )
 
 // Store is the persistence surface the commands use.

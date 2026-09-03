@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/your-username/pomodoro.git
+git clone https://github.com/christopherwc/pomodoro.git
 cd pomodoro
 make check     # fmt, vet, race, coverage, lint
 ```
