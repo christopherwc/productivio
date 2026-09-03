@@ -8,6 +8,14 @@ cd pomodoro
 make check     # fmt, vet, race, coverage, lint
 ```
 
+The GUI in `gui/` is a separate Go module (it needs cgo; the module
+above does not) with its own checks:
+
+```bash
+cd gui
+make check     # fmt, vet, test, tidy, verify, vulncheck
+```
+
 No dependencies to install: the module requires nothing beyond the
 standard library, and `go.mod` should stay that way. A pull request
 that adds a dependency needs to argue for it in the description.
