@@ -1,7 +1,15 @@
 # Build output
 /bin/
 /dist/
+/gui/bin/
 *.exe
+
+# Local multi-module workspace. Not committed: it would put the CLI
+# and GUI modules in workspace mode for every `go` command run from
+# the repo root, including CI's, which the GUI's cgo build
+# requirements are deliberately kept out of. See the root README.
+go.work
+go.work.sum
 
 # Test and coverage artefacts
 coverage.out

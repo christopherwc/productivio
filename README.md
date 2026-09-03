@@ -198,6 +198,14 @@ comment, and opens a PR that updates both when a new release ships.
 
 ## Building a graphical version
 
+**Work has started on a native GUI** in `gui/` (Fyne), landing as a
+sequence of small PRs. It is a second, separate Go module with its own
+`go.mod`/CI job, specifically so the CLI above keeps its zero-dependency,
+no-cgo, single-static-binary properties untouched — see `gui/go.mod`'s
+header comment for why. This section will be rewritten to describe the
+finished GUI once that work lands; until then it still describes the
+options as they stood before.
+
 If the GUI matters more than the single-binary property, the realistic
 options, in rough order of effort:
 

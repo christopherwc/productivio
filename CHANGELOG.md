@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`gui/`** — scaffold for a native desktop GUI (Fyne), as a second,
+  separate Go module so the CLI's zero-dependency/no-cgo/single-binary
+  properties are unaffected. CI, `go.mod` tidiness, `go mod verify` and
+  a pinned-version `govulncheck` scan all run in a new `GUI` job; a new
+  Dependabot `gomod` entry tracks Fyne's dependency tree. No user-facing
+  functionality yet — this is the window/build scaffold only.
+
 ## [1.0.0] - 2026-09-03
 
 Port of the Python/Tkinter application to Go.
