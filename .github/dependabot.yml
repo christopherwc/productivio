@@ -1,10 +1,17 @@
 version: 2
 updates:
-  # There are no Go module dependencies to track, so only the actions
-  # ecosystem is watched.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
     commit-message:
       prefix: "ci"
+
+  # The root CLI module has zero dependencies; only the gui module
+  # (Fyne and its transitive tree) needs watching.
+  - package-ecosystem: gomod
+    directory: "/gui"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(gui)"
