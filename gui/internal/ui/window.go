@@ -2,23 +2,21 @@
 package ui
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2/container"
 
 	"github.com/christopherwc/productivio/gui/internal/app"
-	"github.com/christopherwc/productivio/internal/platform"
 )
 
-// NewWindow builds the main application window. Content is a
-// placeholder for now; real views land in later commits.
+// NewWindow builds the main application window: a tab per view. Later
+// commits add tabs here for tasks, projects and habits; they append to
+// this container rather than rebuilding it.
 func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 	w := a.NewWindow("Pomodoro")
-	w.SetContent(widget.NewLabel(fmt.Sprintf(
-		"Pomodoro GUI — today is %s. Press %s to quit.",
-		env.Today(), platform.Accelerator("Q"),
-	)))
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Dashboard", NewDashboard(env)),
+	)
+	w.SetContent(tabs)
 	w.Resize(fyne.NewSize(480, 320))
 	return w
 }

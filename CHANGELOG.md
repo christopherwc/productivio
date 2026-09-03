@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`gui/internal/app`** — the Store/Env abstraction the GUI's views are
   built against, mirroring `internal/cli`'s pattern so views can be
   tested without touching real files or a real clock.
+- **GUI dashboard view.** The first real tab: today's focus time, task
+  and habit progress, and portfolio-level project stats — the same
+  rollup as `pomodoro status`. The window is now a tab container that
+  later views add tabs to, rather than a single placeholder label.
 
 ### Fixed
 

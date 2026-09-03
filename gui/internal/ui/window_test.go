@@ -13,7 +13,7 @@ func TestNewWindow(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()
 
-	env := &app.Env{Now: func() time.Time { return time.Now() }}
+	env := &app.Env{Store: &fakeStore{}, Now: func() time.Time { return time.Now() }}
 	w := NewWindow(a, env)
 	defer w.Close()
 
