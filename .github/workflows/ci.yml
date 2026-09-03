@@ -129,6 +129,76 @@ jobs:
           awk -v t="$total" 'BEGIN { exit (t >= 99.5) ? 0 : 1 }' || {
             echo "Coverage $total% is below the 99.5% floor"; exit 1; }
 
+  gui:
+    name: GUI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      # Fyne needs cgo; this overrides the workflow-level CGO_ENABLED=0
+      # for every step in this job. The gui/ module is deliberately
+      # separate from the root module so that override stays scoped
+      # here — see the root README's "How the GUI works" section.
+      CGO_ENABLED: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.23"
+          cache: false
+
+      # Fyne is cgo-linked against GL/X11 even for headless tests.
+      # macos-latest already has everything it needs via Xcode CLT.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      - name: Check formatting
+        working-directory: gui
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt -s -w:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Check go.mod is tidy
+        working-directory: gui
+        run: |
+          go mod tidy
+          if [ -n "$(git status --porcelain -- go.mod go.sum)" ]; then
+            echo "gui/go.mod is not tidy; run 'go mod tidy' in gui/"; exit 1
+          fi
+
+      - name: Verify module checksums
+        working-directory: gui
+        run: go mod verify
+
+      - name: Vulnerability scan
+        working-directory: gui
+        # Pinned version, not @latest: staticcheck's @latest already
+        # broke this CI once by silently requiring a newer Go than the
+        # job had. See the Lint job's staticcheck step.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
+      - run: go vet ./...
+        working-directory: gui
+
+      # No numeric coverage floor here, unlike the CLI's ./internal/...:
+      # widget-wiring code doesn't reach the same statement-coverage
+      # bar as domain logic, and the domain logic itself is already
+      # covered by internal/core's own suite, which this package calls
+      # into rather than reimplementing. See CONTRIBUTING.md.
+      - name: Test (headless — see internal/ui's use of fyne.io/fyne/v2/test)
+        working-directory: gui
+        run: go test ./...
+
+      - name: Build
+        working-directory: gui
+        run: go build ./...
+
   build:
     name: Cross-compile
     needs: [lint, test]
