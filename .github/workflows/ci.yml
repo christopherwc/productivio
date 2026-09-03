@@ -1,0 +1,148 @@
+# Continuous integration.
+#
+# The suite runs on both target platforms, because the platform package
+# is the whole reason this project cares about the difference. Coverage
+# is combined afterwards so the macOS branches are covered by the macOS
+# runs and the Linux branches by the Linux runs.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt -s -w:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum 2>/dev/null || \
+            { echo "go.mod is not tidy; run 'go mod tidy'"; exit 1; }
+
+      - run: go vet ./...
+
+      - name: staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          version: latest
+          install-go: false
+
+  test:
+    name: Test (${{ matrix.os }}, Go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Let every combination report, so one platform's failure does not
+      # hide another's.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ["1.21", "1.22", "1.23"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Report the environment under test
+        run: go version && go env GOOS GOARCH
+
+      # The race detector needs cgo, so it is enabled for this step
+      # only; everything else stays static.
+      - name: Test with the race detector
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
+      - name: Test with coverage
+        run: go test -coverprofile=coverage-${{ matrix.os }}-${{ matrix.go }}.out ./internal/...
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.go }}
+          path: coverage-*.out
+          retention-days: 1
+
+  coverage:
+    name: Coverage
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      # gocovmerge is not in the standard toolchain, so the profiles are
+      # concatenated by hand: keep one "mode:" line, then every block.
+      - name: Combine the profiles
+        run: |
+          echo "mode: set" > combined.out
+          for f in coverage-*.out; do tail -n +2 "$f" >> "$f.body"; done
+          sort -u coverage-*.out.body | grep -v '^mode:' >> combined.out || true
+          go tool cover -func=combined.out | tail -20
+
+      - name: Enforce the threshold
+        run: |
+          total=$(go tool cover -func=combined.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "Total statement coverage: $total%"
+          # 99.9%: one statement is documented as unreachable in
+          # internal/core/store.go. See the README.
+          awk -v t="$total" 'BEGIN { exit (t >= 99.5) ? 0 : 1 }' || {
+            echo "Coverage $total% is below the 99.5% floor"; exit 1; }
+
+  build:
+    name: Cross-compile
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      # No cgo means every target builds from one machine, with no
+      # toolchain to install.
+      - name: Build every target
+        run: make release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/
