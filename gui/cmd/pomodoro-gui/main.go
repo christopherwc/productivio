@@ -7,16 +7,27 @@
 package main
 
 import (
-	"fyne.io/fyne/v2/app"
+	"fmt"
+	"log"
+	"os"
 
+	fyneapp "fyne.io/fyne/v2/app"
+
+	gapp "github.com/christopherwc/productivio/gui/internal/app"
 	"github.com/christopherwc/productivio/gui/internal/ui"
 )
 
 func main() {
-	// Environment wiring (data directory, persistent Store, legacy
-	// migration) lands here in a follow-up commit; this is the window
-	// scaffold only.
-	a := app.New()
-	w := ui.NewWindow(a)
+	env, migrated, err := gapp.NewRealEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pomodoro-gui:", err)
+		os.Exit(1)
+	}
+	if migrated {
+		log.Println("Imported your existing session history.")
+	}
+
+	a := fyneapp.New()
+	w := ui.NewWindow(a, env)
 	w.ShowAndRun()
 }
