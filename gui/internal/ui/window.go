@@ -15,6 +15,7 @@ func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 	w := a.NewWindow("Pomodoro")
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Dashboard", NewDashboard(env)),
+		container.NewTabItem("Tasks", NewTasksTab(env)),
 	)
 	w.SetContent(tabs)
 	w.Resize(fyne.NewSize(480, 320))
