@@ -180,6 +180,22 @@ schedule branches explicitly.
 CI runs the matrix on Ubuntu and macOS across Go 1.21–1.23, with
 `go vet`, the race detector, `staticcheck` and `gofmt` enforcement.
 
+### Actions are pinned to a commit, not a tag
+
+Every third-party step in `.github/workflows/ci.yml` is pinned to a
+full commit SHA (`actions/checkout@3d3c42e...  # v7`), not a floating
+tag like `@v4`. Tags are mutable — whoever controls the upstream repo
+can repoint one at a different commit at any time — so a tag-pinned
+workflow trusts every future push to that tag, not just the code that
+was reviewed when the pin was added. A compromised action is a
+supply-chain attack with direct access to `GITHUB_TOKEN` and anything
+the runner can reach. Pinning to a SHA makes the dependency immutable:
+the workflow keeps running exactly the code that was audited, and
+bumping it is a visible, reviewable diff instead of a silent change.
+The version is kept as a trailing comment purely for humans; Dependabot
+(configured in `.github/dependabot.yml`) reads the SHA, not the
+comment, and opens a PR that updates both when a new release ships.
+
 ## Building a graphical version
 
 If the GUI matters more than the single-binary property, the realistic
