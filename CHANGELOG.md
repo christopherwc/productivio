@@ -45,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a fake clock. Verified against the real binary under Xvfb: a
   full real-time work→rest cycle, credited to a task selected through
   the dropdown, correctly persisted and visible via the CLI afterward.
+- **GUI menu bar.** A File menu with Quit, bound to Cmd+Q on macOS and
+  Ctrl+Q elsewhere via Fyne's own cross-platform shortcut modifier and
+  rendered automatically next to the label through the menu item's
+  `Shortcut` field. The item's label must be exactly "Quit" — Fyne
+  auto-appends its own fallback Quit item to the menu unless it finds
+  one already labeled exactly that, which produced two Quit entries
+  in the running app when this instead read "Quit (Ctrl+Q)", caught
+  by screenshot before it ever merged. Verified against the real
+  binary under Xvfb: exactly one Quit item, and both the menu click
+  and the raw keyboard shortcut quit the app.
 
 ### Fixed
 
