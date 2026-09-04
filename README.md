@@ -38,8 +38,10 @@ What you get instead:
 | Apple Silicon | Needs an arm64-native Python | `GOOS=darwin GOARCH=arm64 go build` |
 | Data files | Same four JSON files | **Byte-compatible — see below** |
 
-If you want the GUI back, [Building a graphical
-version](#building-a-graphical-version) sets out what that would take.
+That's still true of `cmd/pomodoro`, the binary this README is mostly
+about — but the GUI does now exist, as a second, separate binary with
+its own module (Fyne, cgo, a newer Go). See [How the GUI
+works](#how-the-gui-works) for why it's kept apart, and how to run it.
 
 ## Your existing data still works
 
@@ -138,8 +140,8 @@ cmd/pomodoro/          main; wires the real environment to the CLI
 internal/core/         model and persistence; no I/O beyond files
 internal/platform/     every Linux/macOS difference, in one place
 internal/cli/          command dispatch and output
-gui/                    the desktop GUI — a separate Go module; see
-                        "Building a graphical version" below
+gui/                    the desktop GUI, a separate Go module — see
+                        "How the GUI works" below
 ```
 
 Three decisions worth knowing before changing anything:
@@ -206,34 +208,83 @@ verify`, a pinned-version `govulncheck` scan runs in the `GUI` CI job
 the git history), and a second Dependabot entry scoped to `/gui`
 tracks Fyne's dependency tree independently of the Actions one above.
 
-## Building a graphical version
+## How the GUI works
 
-**Work has started on a native GUI** in `gui/` (Fyne), landing as a
-sequence of small PRs. It is a second, separate Go module with its own
-`go.mod`/CI job, specifically so the CLI above keeps its zero-dependency,
-no-cgo, single-static-binary properties untouched — see `gui/go.mod`'s
-header comment for why. This section will be rewritten to describe the
-finished GUI once that work lands; until then it still describes the
-options as they stood before.
+`gui/` is a native desktop GUI (Fyne) with five tabs — Dashboard,
+Tasks, Projects, Habits, Timer — mirroring what the CLI already does,
+plus a File menu with Quit. Run it with:
 
-If the GUI matters more than the single-binary property, the realistic
-options, in rough order of effort:
+```bash
+cd gui
+go run ./cmd/pomodoro-gui
+```
 
-- **[Fyne](https://fyne.io)** — closest to the Tkinter original in
-  spirit. Widgets, layouts, native-ish look. Needs cgo and OpenGL
-  headers; cross-compiling becomes a real chore.
-- **[Gio](https://gioui.org)** — immediate-mode, excellent performance,
-  a much larger rewrite of the interface layer.
-- **[Wails](https://wails.io)** — HTML/CSS front end over this Go
-  backend. Uses the system WebView, so no bundled Chromium, but you are
-  writing a web front end.
-- **A terminal UI** — [Bubble Tea](https://github.com/charmbracelet/bubbletea)
-  or [tview](https://github.com/rivo/tview). Keeps the static binary,
-  gets back the interactive four-pane layout.
+It reads and writes the exact same data files as the CLI (same
+`platform.DataDir()`, same `core.Store`), so the two are interchangeable
+day to day — add a task from the CLI, see it in the GUI's Tasks tab, or
+the reverse.
 
-In every case `internal/core` and `internal/platform` are reusable as
-they stand; only `internal/cli` would be replaced. That separation was
-the point of the split.
+### Why a second module
+
+Fyne needs cgo and Go ≥ 1.22, both of which would otherwise force this
+module's `go.mod` (`go 1.21`, zero dependencies, no cgo) to change too,
+breaking the CLI's single-static-binary property and its CI matrix's
+Go 1.21 leg. `gui/go.mod` is a second, separate Go module instead —
+`github.com/christopherwc/productivio/gui`, `go 1.25` — with its own
+`replace github.com/christopherwc/productivio => ../` pointing back at
+this one. That works — `gui/internal/ui` can still import
+`internal/core` and `internal/platform` from a different module —
+because Go's `internal/` visibility rule is import-path-based, not
+module-based: `.../productivio/gui/...` is still inside the
+`.../productivio/` tree.
+
+One consequence worth knowing before changing anything: `internal/core`
+and `internal/platform` are reusable exactly as they stand — nothing
+in `gui/` ever reimplements task/habit/project logic, it only calls
+into `core`, matching the pattern `internal/cli` already set. Neither
+of those two packages was replaced or forked for the GUI; a third
+interface (a web UI, a TUI) could be added the same way, as a third
+module, without touching either.
+
+### Concurrency
+
+`*core.Store` and the collection types have no mutex. The rule `gui/`
+follows: every Store or UI touch happens on Fyne's UI goroutine. The
+timer is the one place this actually matters — `app.Timer` is a plain,
+synchronous, goroutine-free state machine, and `internal/ui`'s
+scheduling loop re-arms `env.AfterFunc` every second, but its raw
+callback does nothing but hop onto the UI goroutine via `fyne.Do`
+before touching `Timer` or `Store` at all.
+
+### Known limitation
+
+Fyne builds every tab's content once, up front, not lazily per
+tab-switch. Add a project in the Projects tab and the Tasks tab's
+project dropdown won't see it until the app restarts — each tab only
+refreshes itself, after its own actions. Not fixed yet; documented
+here rather than silently worked around.
+
+### Testing
+
+`fyne.io/fyne/v2/test`'s headless driver needs no real display, so
+`go test ./...` in `gui/` runs the same everywhere CI does. `gui/` has
+no hard statement-coverage floor the way `internal/core` does (99.9%)
+— widget-wiring code doesn't reach that bar as naturally as domain
+logic, and the domain logic itself stays covered by `internal/core`'s
+own suite, which `gui/` calls into rather than reimplementing. Each
+row-formatting function (`taskRowText`, `projectRowText`,
+`habitRowText`, `healthColor`) is still pulled out and unit-tested on
+its own, separate from the Fyne wiring around it.
+
+Headless tests only prove the widget tree builds; they don't prove it
+renders sanely or that a countdown actually ticks in real time.
+Building the real binary and running it under a virtual display
+(Xvfb), screenshotting it, and driving it with `xdotool` caught two
+bugs no headless test did: an add-form's fields collapsing to a few
+unreadable characters (`widget.Entry` doesn't size itself to
+placeholder text), and a duplicate "Quit" menu entry (Fyne silently
+auto-appends its own unless an item is labeled exactly "Quit"). Worth
+reaching for again for anything layout- or interaction-shaped.
 
 ## License
 
