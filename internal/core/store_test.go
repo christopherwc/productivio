@@ -188,6 +188,19 @@ func TestStoreDiscardsInvalidRecords(t *testing.T) {
 			t.Errorf("loaded %d habits, want 1", len(got))
 		}
 	})
+
+	t.Run("a project's dangling parent_id", func(t *testing.T) {
+		// LoadProjects must repair a reference to a parent that was
+		// itself deleted (or never existed) by hand-editing the file,
+		// not merely leave it pointing at nothing.
+		store := newTestStore(t)
+		write(t, store.Path(ProjectsFile),
+			`[{"id":"a","name":"Orphan","parent_id":"no-such-project"}]`)
+		loaded := store.LoadProjects()
+		if len(loaded) != 1 || loaded[0].ParentID != "" {
+			t.Errorf("loaded %+v, want ParentID cleared", loaded)
+		}
+	})
 }
 
 func TestStoreLoadsPythonFiles(t *testing.T) {

@@ -65,6 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `macos-latest` via clang's built-in multi-arch support — and
   linux/arm64 stays an explicitly documented gap rather than a silent
   one, pending either a native arm64 runner or a cross-gcc + sysroot.
+- **Subprojects.** A project can now be filed under another via
+  `pomodoro project parent <id> <parent|->` or, in the GUI, a parent
+  picker on the add-project form. `TaskProgress` and `EffortProgress`
+  roll a subproject's own progress up into every one of its ancestors,
+  at any depth, so a parent's numbers reflect its whole tree, not just
+  its direct tasks. `project list` (and the GUI projects view) render
+  the tree indented rather than as a flat list. Reassigning a parent
+  rejects a cycle (a project becoming its own ancestor); deleting a
+  project promotes its direct subprojects up one level instead of
+  orphaning them; and a dangling or cyclic `parent_id` read back from a
+  hand-edited data file is repaired on load, the same guarantee
+  `normalize` already gave every other field.
+- **GUI blue/grey theme.** Replaces Fyne's default palette with a
+  custom blue-accent, slate-grey theme (light and dark variants),
+  verified against the real binary under Xvfb.
 
 ### Fixed
 

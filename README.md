@@ -84,6 +84,8 @@ make release     # binaries for darwin/arm64, darwin/amd64, linux/amd64, linux/a
 pomodoro status                          # today's summary
 pomodoro project add "Ship v1" 2026-09-30
 pomodoro project list                    # copy the id
+pomodoro project add "Checkout redesign" - <project-id>   # a subproject
+pomodoro project parent <id> <parent-id> # file an existing project under another
 pomodoro task add "Write docs" 4 <project-id>
 pomodoro task list
 pomodoro start -task <task-id>           # 25/5 by default
@@ -99,18 +101,27 @@ integration the whole design is built around: the timer knows what it
 is timing, so focus time becomes project-level data instead of generic
 minutes.
 
+A project can be filed under another to build a tree of subprojects —
+`project list` prints it indented, and a subproject's task and effort
+progress rolls up into every one of its ancestors, at any depth. The
+tree rejects cycles: a project can never become its own ancestor.
+Deleting a project promotes its direct subprojects up one level rather
+than orphaning them.
+
 ## How progress is measured
 
 Ported unchanged from the Python version, including the reasoning.
 
 **Task progress** — completed tasks over total. Adding tasks lowers it
 even though nothing was undone; the scope grew, and the number saying
-so is correct.
+so is correct. For a project with subprojects, this counts every
+subproject's tasks too, at any depth: filing work under a subproject
+does not hide it from the parent's rollup.
 
 **Effort progress** — completed pomodoros over estimated. Deliberately
 not capped at 100%. Tasks half done with 90% of the estimate already
 spent means the remaining half will hurt, and hiding that throws the
-signal away.
+signal away. Also rolled up across subprojects, same as task progress.
 
 **Health** — On track, At risk, Overdue, Not started, On hold,
 Completed — from deterministic rules, not heuristics, so it is
