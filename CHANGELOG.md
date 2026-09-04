@@ -71,15 +71,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `container.NewGridWrap`, and resizing the default window to 820×560.
   Re-verified visually after the fix: all three add-forms are readable
   and every row's buttons stay on screen.
-
-### Fixed
-
 - **Stale post-rename docs.** README and CONTRIBUTING both still said
   `cd pomodoro` after cloning, left over from before the repo was
   renamed to `productivio`. CONTRIBUTING also undercounted the
   required CI checks (nine, not eleven, since the `GUI` jobs were
   added). README's Layout section and supply-chain-security section
   now mention `gui/`.
+
+### Documentation
+
+- **README's "Building a graphical version" rewritten as "How the GUI
+  works."** All four views, the timer and the menu bar are done, so
+  the section now describes the module split (and why), the
+  concurrency rule, a known cross-tab staleness limitation, and what
+  building the real binary under Xvfb caught that headless tests
+  didn't — rather than a hypothetical options list. CONTRIBUTING gains
+  matching rules for the coverage exception, the concurrency rule, and
+  reaching for a real-binary check on layout/interaction changes.
 
 ## [1.0.0] - 2026-09-03
 

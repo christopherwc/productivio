@@ -57,13 +57,41 @@ to change it, write a migration.
 **Table-driven tests, `t.TempDir()` for anything on disk.** No test may
 touch a real data directory.
 
+**`gui/` has no hard coverage floor.** The root module's coverage job
+enforces 99.5% and is unaffected by anything in `gui/` (it's a
+separate module). Widget-wiring code doesn't reach that bar as
+naturally as domain logic does, and the domain logic itself stays
+covered by `internal/core`'s own suite, which `gui/` calls into rather
+than reimplementing — pull the formatting/decision logic out of a view
+into its own function (see `taskRowText`, `healthColor`, etc.) and
+unit-test that, rather than chasing coverage on the Fyne wiring around
+it.
+
+**Every Store or UI touch in `gui/` happens on Fyne's UI goroutine.**
+`*core.Store` has no mutex. `app.Timer`'s countdown is the one place
+this matters in practice — see its doc comment and
+`internal/ui/timer.go`'s scheduling loop for the pattern: a background
+goroutine's callback does nothing but hop onto the UI goroutine via
+`fyne.Do` before touching anything.
+
+**Headless `gui/` tests don't prove a real render is sane.**
+`fyne.io/fyne/v2/test`'s driver proves a widget tree builds, not that
+it's laid out usably or that user input actually reaches the right
+callback — two real bugs (an unreadably narrow add-form, a duplicate
+menu item) only showed up once the real binary was built and run under
+Xvfb with screenshots. Reach for that on anything layout- or
+interaction-shaped; `make check` in `gui/` won't catch it.
+
 ## Before opening a pull request
 
-1. `make check` passes.
-2. Coverage has not dropped. One statement is documented as
-   unreachable; there should not be a second without an argument.
+1. `make check` passes (both modules, if the change touches `gui/`).
+2. Coverage has not dropped, for changes to the root module. One
+   statement is documented as unreachable; there should not be a
+   second without an argument. `gui/` has no floor — see above.
 3. `CHANGELOG.md` has a line under **Unreleased**.
-4. Say which platform you tested on.
+4. Say which platform you tested on, and — for anything in `gui/`
+   touching layout or interaction — whether you verified it against
+   the real binary, not just headless tests.
 
 ## Commit messages
 
@@ -73,5 +101,6 @@ Conventional Commits, matching the changelog's organisation:
 feat(core): add per-project effort estimates
 fix(habits): count backfilled completions before the created date
 test(cli): cover the failed task-credit path
-docs(readme): explain why the GUI did not port
+feat(gui): add habits view
+fix(gui): fix add-form field width and window-size overflow
 ```
