@@ -98,6 +98,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   didn't — rather than a hypothetical options list. CONTRIBUTING gains
   matching rules for the coverage exception, the concurrency rule, and
   reaching for a real-binary check on layout/interaction changes.
+- **Post-release-packaging doc pass.** `app.TimerPhase`'s `PhaseIdle`/
+  `PhaseWork`/`PhaseRest` constants had no comment directly above their
+  `const (` block — every other exported const group in the repo has
+  one, caught by re-running the same doc-comment audit this session
+  used earlier. CONTRIBUTING's required-check count was still "eleven"
+  after the two `GUI Release` jobs joined the branch-protection ruleset
+  in the release-packaging PR, making it thirteen. README's GUI section
+  had no mention of `make release` at all.
 
 ## [1.0.0] - 2026-09-03
 

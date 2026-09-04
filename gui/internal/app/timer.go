@@ -9,6 +9,8 @@ import (
 // TimerPhase is which part of a pomodoro cycle a Timer is in.
 type TimerPhase int
 
+// The phases a Timer moves through: idle, then work, then rest, then
+// back to idle.
 const (
 	PhaseIdle TimerPhase = iota
 	PhaseWork
