@@ -35,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GUI layout overflow.** Built and ran the actual `pomodoro-gui`
+  binary for the first time this session (previously verified only via
+  headless widget tests and CI's build-only job) — under Xvfb, with
+  screenshots. Found two real problems no unit test could catch:
+  `widget.Entry` doesn't size itself to its placeholder text, so every
+  add-row's fields were unusably narrow inside a plain `HBox`; and the
+  480×320 default window size clipped list rows' delete/reorder
+  buttons off the right edge entirely. Fixed by giving each add-row's
+  primary field the `Border` layout's stretching center slot instead
+  of sharing an `HBox`, wrapping secondary fields at a fixed width via
+  `container.NewGridWrap`, and resizing the default window to 820×560.
+  Re-verified visually after the fix: all three add-forms are readable
+  and every row's buttons stay on screen.
+
+### Fixed
+
 - **Stale post-rename docs.** README and CONTRIBUTING both still said
   `cd pomodoro` after cloning, left over from before the repo was
   renamed to `productivio`. CONTRIBUTING also undercounted the
