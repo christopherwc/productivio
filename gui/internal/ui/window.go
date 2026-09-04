@@ -8,9 +8,7 @@ import (
 	"github.com/christopherwc/productivio/gui/internal/app"
 )
 
-// NewWindow builds the main application window: a tab per view. Later
-// commits add tabs here for tasks, projects and habits; they append to
-// this container rather than rebuilding it.
+// NewWindow builds the main application window: a tab per view.
 func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 	w := a.NewWindow("Pomodoro")
 	tabs := container.NewAppTabs(
@@ -18,6 +16,7 @@ func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 		container.NewTabItem("Tasks", NewTasksTab(env)),
 		container.NewTabItem("Projects", NewProjectsTab(env)),
 		container.NewTabItem("Habits", NewHabitsTab(env)),
+		container.NewTabItem("Timer", NewTimerTab(env)),
 	)
 	w.SetContent(tabs)
 	// Wide enough that a task/habit row's up/down/delete buttons stay
