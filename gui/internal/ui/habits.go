@@ -110,7 +110,7 @@ func NewHabitsTab(env *app.Env) fyne.CanvasObject {
 	scheduleSelect := widget.NewSelect(presetNames, nil)
 	scheduleSelect.SetSelected(core.SchedulePresets[0].Label)
 
-	addForm := container.NewBorder(nil, nil, nil, widget.NewButton("Add", func() {
+	addButton := widget.NewButton("Add", func() {
 		if nameEntry.Text == "" {
 			return
 		}
@@ -127,7 +127,12 @@ func NewHabitsTab(env *app.Env) fyne.CanvasObject {
 		nameEntry.SetText("")
 		scheduleSelect.SetSelected(core.SchedulePresets[0].Label)
 		save()
-	}), container.NewHBox(nameEntry, scheduleSelect))
+	})
+
+	// See tasks.go's NewTasksTab for why the name field gets the
+	// Border's stretching center slot rather than sharing an HBox.
+	addForm := container.NewBorder(nil, nil, nil,
+		container.NewHBox(scheduleSelect, addButton), nameEntry)
 
 	return container.NewBorder(addForm, nil, nil, nil, list)
 }

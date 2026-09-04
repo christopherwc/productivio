@@ -20,6 +20,11 @@ func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 		container.NewTabItem("Habits", NewHabitsTab(env)),
 	)
 	w.SetContent(tabs)
-	w.Resize(fyne.NewSize(480, 320))
+	// Wide enough that a task/habit row's up/down/delete buttons stay
+	// on screen, and tall enough to show several rows without
+	// scrolling immediately. Verified against a real render, not
+	// guessed: 480x320 (the scaffold's placeholder size) clipped
+	// buttons off the right edge of every list view.
+	w.Resize(fyne.NewSize(820, 560))
 	return w
 }
