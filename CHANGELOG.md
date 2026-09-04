@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (On track/At risk/Overdue/...) shown as a colored label — the same
   surface `pomodoro project` exposes; the CLI has no project
   delete/hold/reopen commands, so neither does this view.
+- **GUI habits view.** Add, check off today, reorder (up/down) and
+  delete habits, each row showing the same 7-day grid, streak and
+  30-day completion rate as `pomodoro habit list`. This is the last of
+  the four views; only the pomodoro timer itself remains.
 
 ### Fixed
 
