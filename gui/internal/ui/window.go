@@ -19,6 +19,7 @@ func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 		container.NewTabItem("Timer", NewTimerTab(env)),
 	)
 	w.SetContent(tabs)
+	w.SetMainMenu(buildMenu(a, w))
 	// Wide enough that a task/habit row's up/down/delete buttons stay
 	// on screen, and tall enough to show several rows without
 	// scrolling immediately. Verified against a real render, not
