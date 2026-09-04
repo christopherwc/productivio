@@ -55,6 +55,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by screenshot before it ever merged. Verified against the real
   binary under Xvfb: exactly one Quit item, and both the menu click
   and the raw keyboard shortcut quit the app.
+- **GUI release packaging.** `gui/Makefile`'s `release` target and a
+  new `GUI Release` CI job build `pomodoro-gui` binaries the way the
+  CLI's `Cross-compile` job builds `pomodoro`'s — except this one
+  can't cross-compile from a single machine: Fyne's cgo needs a C
+  toolchain for the actual target, not just a `GOOS`/`GOARCH` env var.
+  Each OS's own runner builds what its own toolchain can reach —
+  linux/amd64 on `ubuntu-latest`, darwin/arm64 and darwin/amd64 on
+  `macos-latest` via clang's built-in multi-arch support — and
+  linux/arm64 stays an explicitly documented gap rather than a silent
+  one, pending either a native arm64 runner or a cross-gcc + sysroot.
 
 ### Fixed
 

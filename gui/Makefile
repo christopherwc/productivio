@@ -13,7 +13,7 @@ GOVULNCHECK_VERSION := v1.7.0
 
 export CGO_ENABLED := 1
 
-.PHONY: help build run test vet fmt fmt-check tidy tidy-check verify vulncheck check clean
+.PHONY: help build run release test vet fmt fmt-check tidy tidy-check verify vulncheck check clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -24,6 +24,33 @@ build:  ## Build ./bin/pomodoro-gui
 
 run: build  ## Build and launch the GUI
 	./bin/$(BINARY)
+
+# Unlike the CLI's release target, this cannot cross-compile from one
+# machine: Fyne needs cgo, and cgo needs a C toolchain for the actual
+# target platform, not just a GOOS/GOARCH env var. Each host builds
+# only what it can natively — Linux builds linux/amd64, and Apple
+# Silicon macOS builds both darwin/arm64 and darwin/amd64 via clang's
+# built-in multi-arch support. linux/arm64 is a known gap: it needs
+# either a native arm64 runner or a cross-gcc + sysroot, neither of
+# which is set up yet.
+release:  ## Build for every target this host's toolchain can reach
+	@mkdir -p dist
+	@os=$$(go env GOOS); \
+	case "$$os" in \
+		linux) \
+			echo "  building linux/amd64"; \
+			GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" \
+				-o dist/$(BINARY)-linux-amd64 ./cmd/$(BINARY) || exit 1 ;; \
+		darwin) \
+			for arch in arm64 amd64; do \
+				echo "  building darwin/$$arch"; \
+				GOOS=darwin GOARCH=$$arch go build -ldflags "$(LDFLAGS)" \
+					-o dist/$(BINARY)-darwin-$$arch ./cmd/$(BINARY) || exit 1; \
+			done ;; \
+		*) \
+			echo "release: no target configured for host OS $$os"; exit 1 ;; \
+	esac
+	@ls -lh dist/
 
 test:  ## Run the tests (headless — see internal/ui's use of fyne.io/fyne/v2/test)
 	go test ./...

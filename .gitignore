@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /gui/bin/
+/gui/dist/
 *.exe
 
 # Local multi-module workspace. Not committed: it would put the CLI
