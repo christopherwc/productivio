@@ -28,6 +28,7 @@ func main() {
 	}
 
 	a := fyneapp.New()
+	a.Settings().SetTheme(ui.NewTheme())
 	w := ui.NewWindow(a, env)
 	w.ShowAndRun()
 }
