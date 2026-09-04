@@ -256,6 +256,24 @@ scheduling loop re-arms `env.AfterFunc` every second, but its raw
 callback does nothing but hop onto the UI goroutine via `fyne.Do`
 before touching `Timer` or `Store` at all.
 
+### Building a release binary
+
+```bash
+cd gui
+make release     # dist/pomodoro-gui-<os>-<arch>, for whatever this host can build
+```
+
+Unlike the CLI's `make release`, this can't cross-compile every target
+from one machine: Fyne's cgo needs a real C toolchain for the target
+platform, not just a `GOOS`/`GOARCH` env var. Each host builds only
+what its own toolchain reaches — `linux/amd64` on Linux; `darwin/arm64`
+and `darwin/amd64` on Apple Silicon macOS, via clang's built-in
+multi-arch support. `linux/arm64` is a known gap, not a silent one: it
+needs either a native arm64 runner or a cross-gcc and sysroot, neither
+set up yet. CI's `GUI Release` job runs this on both `ubuntu-latest`
+and `macos-latest` and uploads whatever each produces as build
+artifacts.
+
 ### Known limitation
 
 Fyne builds every tab's content once, up front, not lazily per
