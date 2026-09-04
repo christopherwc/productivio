@@ -66,3 +66,64 @@ func TestNewProjectsTab(t *testing.T) {
 		t.Error("NewProjectsTab() = nil")
 	}
 }
+
+func TestFlattenProjectTree(t *testing.T) {
+	var projects core.Projects
+	website, err := projects.Add("Website", "", core.Date{}, core.Today())
+	if err != nil {
+		t.Fatalf("projects.Add() error = %v", err)
+	}
+	redesign, err := projects.Add("Redesign", "", core.Date{}, core.Today())
+	if err != nil {
+		t.Fatalf("projects.Add() error = %v", err)
+	}
+	other, err := projects.Add("Other", "", core.Date{}, core.Today())
+	if err != nil {
+		t.Fatalf("projects.Add() error = %v", err)
+	}
+	if err := projects.SetParent(redesign.ID, website.ID); err != nil {
+		t.Fatalf("SetParent() error = %v", err)
+	}
+
+	got := flattenProjectTree(projects)
+	want := []projectEntry{
+		{project: website, depth: 0},
+		{project: redesign, depth: 1},
+		{project: other, depth: 0},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("flattenProjectTree() = %d entries, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].project != w.project || got[i].depth != w.depth {
+			t.Errorf("entry %d = {%s depth=%d}, want {%s depth=%d}",
+				i, got[i].project.Name, got[i].depth, w.project.Name, w.depth)
+		}
+	}
+}
+
+func TestNewProjectsTabWithSubprojects(t *testing.T) {
+	// A regression guard for the tab-building code path that has
+	// subprojects to flatten and indent: it must not panic when a
+	// project's ParentID points at another entry in the same store.
+	a := test.NewApp()
+	defer a.Quit()
+
+	store := &fakeStore{}
+	website, err := store.projects.Add("Website", "", core.Date{}, core.Today())
+	if err != nil {
+		t.Fatalf("projects.Add() error = %v", err)
+	}
+	redesign, err := store.projects.Add("Redesign", "", core.Date{}, core.Today())
+	if err != nil {
+		t.Fatalf("projects.Add() error = %v", err)
+	}
+	if err := store.projects.SetParent(redesign.ID, website.ID); err != nil {
+		t.Fatalf("SetParent() error = %v", err)
+	}
+
+	env := &app.Env{Store: store, Now: func() time.Time { return time.Now() }}
+	if content := NewProjectsTab(env); content == nil {
+		t.Error("NewProjectsTab() = nil")
+	}
+}

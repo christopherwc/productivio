@@ -182,11 +182,14 @@ func (s *Store) SaveHabits(habits Habits) error {
 	return s.writeJSON(HabitsFile, nonNil(habits))
 }
 
-// LoadProjects reads the project list, repairing incomplete records.
+// LoadProjects reads the project list, repairing incomplete records and
+// any parent-project reference that is dangling or would close a cycle.
 func (s *Store) LoadProjects() Projects {
 	var projects Projects
 	s.readJSON(ProjectsFile, &projects)
-	return normalizeAll(projects, func(p *Project) bool { return keep(p.ID, p.normalize) })
+	projects = normalizeAll(projects, func(p *Project) bool { return keep(p.ID, p.normalize) })
+	projects.repairHierarchy()
+	return projects
 }
 
 // SaveProjects persists the project list.

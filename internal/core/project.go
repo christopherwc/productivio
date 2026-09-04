@@ -43,6 +43,7 @@ type Project struct {
 	Created     Date    `json:"created"`
 	Due         Date    `json:"due"`
 	CompletedAt *string `json:"completed_at"`
+	ParentID    string  `json:"parent_id"` // owning project, or empty for a top-level project
 }
 
 // Projects is the ordered project list.
@@ -171,13 +172,27 @@ func (p *Project) ScheduleElapsed(today Date) (float64, bool) {
 	return elapsed, true
 }
 
-// TaskProgress reports completed and total tasks and the fraction done.
+// projectAndDescendantTasks returns every task filed directly under
+// projectID plus every task filed under one of its subprojects, at any
+// depth — the set a parent project's rollups are computed over, so
+// subproject progress counts toward the project that contains it.
+func (ps Projects) projectAndDescendantTasks(tasks Tasks, projectID string) Tasks {
+	owned := tasks.ForProject(projectID)
+	for _, sub := range ps.Descendants(projectID) {
+		owned = append(owned, tasks.ForProject(sub.ID)...)
+	}
+	return owned
+}
+
+// TaskProgress reports completed and total tasks and the fraction done,
+// counting the project's own tasks together with every subproject's,
+// at any depth.
 //
 // The fraction is zero for a project with no tasks, so callers never
 // have to guard against dividing by zero. Note that adding tasks lowers
 // this figure even though nothing was undone: the scope grew.
 func (ps Projects) TaskProgress(tasks Tasks, projectID string) (done, total int, fraction float64) {
-	owned := tasks.ForProject(projectID)
+	owned := ps.projectAndDescendantTasks(tasks, projectID)
 	for _, t := range owned {
 		if t.Done {
 			done++
@@ -191,12 +206,13 @@ func (ps Projects) TaskProgress(tasks Tasks, projectID string) (done, total int,
 }
 
 // EffortProgress reports completed and estimated pomodoros and the
-// fraction spent.
+// fraction spent, counting the project's own tasks together with every
+// subproject's, at any depth.
 //
 // The fraction is deliberately not capped at 1.0: going over the
 // estimate is exactly the signal worth surfacing.
 func (ps Projects) EffortProgress(tasks Tasks, projectID string) (completed, estimated int, fraction float64) {
-	for _, t := range tasks.ForProject(projectID) {
+	for _, t := range ps.projectAndDescendantTasks(tasks, projectID) {
 		completed += t.Completed
 		estimated += t.Estimate
 	}
@@ -317,15 +333,130 @@ func (ps *Projects) Add(name, description string, due, created Date) (*Project, 
 
 // Delete removes a project, reporting whether it existed.
 //
-// Its tasks are not deleted; see Tasks.DetachFromProject.
+// Its tasks are not deleted; see Tasks.DetachFromProject. Its direct
+// subprojects are re-parented to the deleted project's own parent (or
+// promoted to top-level, if it had none): removing a project folds its
+// children up one level rather than orphaning them.
 func (ps *Projects) Delete(id string) bool {
 	for i, p := range *ps {
 		if p.ID == id {
+			for _, child := range ps.Children(id) {
+				child.ParentID = p.ParentID
+			}
 			*ps = append((*ps)[:i], (*ps)[i+1:]...)
 			return true
 		}
 	}
 	return false
+}
+
+// Children returns the projects directly filed under parentID, in list
+// order. Pass "" for the top-level projects.
+func (ps Projects) Children(parentID string) Projects {
+	var out Projects
+	for _, p := range ps {
+		if p.ParentID == parentID {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Descendants returns every project transitively filed under id — its
+// children, their children, and so on — depth-first. This is the set
+// TaskProgress and EffortProgress roll up into a parent project's own
+// totals.
+func (ps Projects) Descendants(id string) Projects {
+	var out Projects
+	for _, child := range ps.Children(id) {
+		out = append(out, child)
+		out = append(out, ps.Descendants(child.ID)...)
+	}
+	return out
+}
+
+// Path renders the breadcrumb from the top-level ancestor down to p,
+// e.g. "Website > Redesign > Checkout". A dangling parent reference
+// (one repairHierarchy has not yet cleared) is treated as the top: the
+// breadcrumb stops there rather than failing.
+func (ps Projects) Path(p *Project) string {
+	if p.ParentID == "" {
+		return p.Name
+	}
+	parent, err := ps.Find(p.ParentID)
+	if err != nil {
+		return p.Name
+	}
+	return ps.Path(parent) + " > " + p.Name
+}
+
+// SetParent files id under parentID, or clears it to make id top-level
+// when parentID is "".
+//
+// Rejected outright: a parent that does not exist, and any assignment
+// that would create a cycle (id becoming its own ancestor), since
+// either would turn the project tree into something no view could
+// render or walk.
+func (ps Projects) SetParent(id, parentID string) error {
+	p, err := ps.Find(id)
+	if err != nil {
+		return err
+	}
+	if parentID == "" {
+		p.ParentID = ""
+		return nil
+	}
+	if _, err := ps.Find(parentID); err != nil {
+		return fmt.Errorf("project: parent %w", err)
+	}
+
+	original := p.ParentID
+	p.ParentID = parentID
+	if ps.hasCycle(p) {
+		p.ParentID = original
+		return fmt.Errorf("project %q: setting parent to %q would create a cycle", id, parentID)
+	}
+	return nil
+}
+
+// hasCycle reports whether following p's chain of ParentID references
+// leads back to p itself.
+func (ps Projects) hasCycle(p *Project) bool {
+	seen := map[string]bool{p.ID: true}
+	cur := p
+	for cur.ParentID != "" {
+		if seen[cur.ParentID] {
+			return true
+		}
+		next, err := ps.Find(cur.ParentID)
+		if err != nil {
+			return false // a dangling reference cannot be a cycle
+		}
+		seen[next.ID] = true
+		cur = next
+	}
+	return false
+}
+
+// repairHierarchy clears any ParentID that is dangling (points to a
+// project not present in ps) or would close a cycle, so a hand-edited
+// or partially-written data file can never leave the project tree
+// unrenderable. Store.LoadProjects calls this after normalizing the
+// individual records, once the full list is available to check
+// references against.
+func (ps Projects) repairHierarchy() {
+	for _, p := range ps {
+		if p.ParentID == "" {
+			continue
+		}
+		if _, err := ps.Find(p.ParentID); err != nil {
+			p.ParentID = ""
+			continue
+		}
+		if ps.hasCycle(p) {
+			p.ParentID = ""
+		}
+	}
 }
 
 // Move reorders a project by delta positions, clamping at the ends.
