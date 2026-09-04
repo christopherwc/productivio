@@ -508,27 +508,34 @@ func cmdProject(env *Env, args []string) error {
 		if len(args) < 3 {
 			return usageErrorf("project parent needs a project id and a parent id (or - to clear)")
 		}
-		parentID := args[2]
-		if parentID == "-" {
-			parentID = ""
+		// Resolved up front, before SetParent, so a successful call
+		// never needs to re-look-up either project to report the
+		// result: both are already known to exist.
+		project, err := projects.Find(args[1])
+		if err != nil {
+			return err
 		}
-		if err := projects.SetParent(args[1], parentID); err != nil {
+		var parent *core.Project
+		if args[2] != "-" {
+			p, err := projects.Find(args[2])
+			if err != nil {
+				return err
+			}
+			parent = p
+		}
+		parentID := ""
+		if parent != nil {
+			parentID = parent.ID
+		}
+		if err := projects.SetParent(project.ID, parentID); err != nil {
 			return err
 		}
 		if err := env.Store.SaveProjects(projects); err != nil {
 			return err
 		}
-		project, err := projects.Find(args[1])
-		if err != nil {
-			return err
-		}
-		if parentID == "" {
+		if parent == nil {
 			fmt.Fprintf(env.Out, "%s is now top-level\n", project.Name)
 		} else {
-			parent, err := projects.Find(parentID)
-			if err != nil {
-				return err
-			}
 			fmt.Fprintf(env.Out, "%s filed under %s\n", project.Name, parent.Name)
 		}
 		return nil

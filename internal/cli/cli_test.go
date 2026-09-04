@@ -710,14 +710,15 @@ func TestSaveFailuresSurface(t *testing.T) {
 	}
 
 	commands := map[string]func(ids map[string]string) []string{
-		"task add":     func(map[string]string) []string { return []string{"task", "add", "New"} },
-		"task done":    func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
-		"task rm":      func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
-		"project add":  func(map[string]string) []string { return []string{"project", "add", "New"} },
-		"project done": func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
-		"habit add":    func(map[string]string) []string { return []string{"habit", "add", "New"} },
-		"habit check":  func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
-		"start":        func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },
+		"task add":       func(map[string]string) []string { return []string{"task", "add", "New"} },
+		"task done":      func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
+		"task rm":        func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
+		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
+		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
+		"project done":   func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
+		"habit add":      func(map[string]string) []string { return []string{"habit", "add", "New"} },
+		"habit check":    func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
+		"start":          func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },
 		"start -task": func(i map[string]string) []string {
 			return []string{"start", "-work", "1", "-rest", "1", "-task", i["task"]}
 		},

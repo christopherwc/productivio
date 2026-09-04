@@ -661,6 +661,32 @@ func TestProjectHierarchy(t *testing.T) {
 		}
 	})
 
+	t.Run("Path stops at a dangling parent reference", func(t *testing.T) {
+		// Only a hand-edited or corrupted file produces this; SetParent
+		// can't. Path must still return something rather than recursing
+		// into a project that is not there.
+		orphan := &Project{ID: "x", Name: "Orphan", ParentID: "no-such-project"}
+		projects := Projects{orphan}
+		if got := projects.Path(orphan); got != "Orphan" {
+			t.Errorf("Path = %q, want %q", got, "Orphan")
+		}
+	})
+
+	t.Run("a dangling reference partway up the chain is not a cycle", func(t *testing.T) {
+		// hasCycle must be able to tell "the chain runs off the edge of
+		// the known projects" apart from "the chain loops": SetParent
+		// only validates the immediate parent, so a corrupted grandparent
+		// reference must not block filing something under a project
+		// whose own ancestry is broken further up.
+		corrupt := &Project{ID: "c", Name: "Corrupt", ParentID: "no-such-project"}
+		projects := Projects{corrupt}
+		leaf := mustProject(t, "Leaf")
+		projects = append(projects, leaf)
+		if err := projects.SetParent(leaf.ID, corrupt.ID); err != nil {
+			t.Errorf("SetParent should not treat a dangling ancestor as a cycle: %v", err)
+		}
+	})
+
 	t.Run("progress rolls subproject tasks up into the parent", func(t *testing.T) {
 		projects, website, redesign, checkout := setup(t)
 		var tasks Tasks
