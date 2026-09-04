@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delete habits, each row showing the same 7-day grid, streak and
   30-day completion rate as `pomodoro habit list`. This is the last of
   the four views; only the pomodoro timer itself remains.
+- **GUI pomodoro timer.** Choose work/rest lengths and an optional
+  open task, then start/pause/resume a real countdown: work→rest→idle
+  transitions, a desktop notification at each transition, and session
+  persistence with task credit on work completion — the same behavior
+  `pomodoro start` has. `app.Timer` is a plain, synchronous,
+  goroutine-free state machine; `internal/ui`'s scheduling loop is the
+  only thing that touches a background goroutine (the raw
+  `env.AfterFunc` tick), and its callback does nothing but hop onto
+  the UI goroutine via `fyne.Do` before calling `Timer.Tick()` — so
+  `Timer` itself needed no mutex and stayed trivially unit-testable
+  with a fake clock. Verified against the real binary under Xvfb: a
+  full real-time work→rest cycle, credited to a task selected through
+  the dropdown, correctly persisted and visible via the CLI afterward.
 
 ### Fixed
 
