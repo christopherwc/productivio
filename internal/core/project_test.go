@@ -550,3 +550,222 @@ func TestProjectSummaryAndPortfolio(t *testing.T) {
 		}
 	})
 }
+
+func TestProjectHierarchy(t *testing.T) {
+	setup := func(t *testing.T) (Projects, *Project, *Project, *Project) {
+		t.Helper()
+		var projects Projects
+		website, err := projects.Add("Website", "", Date{}, fixedToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		redesign, err := projects.Add("Redesign", "", Date{}, fixedToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkout, err := projects.Add("Checkout", "", Date{}, fixedToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := projects.SetParent(redesign.ID, website.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := projects.SetParent(checkout.ID, redesign.ID); err != nil {
+			t.Fatal(err)
+		}
+		return projects, website, redesign, checkout
+	}
+
+	t.Run("a fresh project is top-level", func(t *testing.T) {
+		p := mustProject(t, "Solo")
+		if p.ParentID != "" {
+			t.Errorf("ParentID = %q, want empty", p.ParentID)
+		}
+	})
+
+	t.Run("SetParent files a project under another", func(t *testing.T) {
+		_, website, redesign, _ := setup(t)
+		if redesign.ParentID != website.ID {
+			t.Errorf("ParentID = %q, want %q", redesign.ParentID, website.ID)
+		}
+	})
+
+	t.Run("SetParent with an empty id clears it", func(t *testing.T) {
+		projects, website, redesign, _ := setup(t)
+		if err := projects.SetParent(redesign.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+		if redesign.ParentID != "" {
+			t.Error("expected redesign to become top-level")
+		}
+		_ = website
+	})
+
+	t.Run("SetParent rejects an unknown parent", func(t *testing.T) {
+		projects, website, _, _ := setup(t)
+		if err := projects.SetParent(website.ID, "no-such-project"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("SetParent rejects an unknown project", func(t *testing.T) {
+		projects, _, _, _ := setup(t)
+		if err := projects.SetParent("no-such-project", ""); !errors.Is(err, ErrNotFound) {
+			t.Errorf("error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("SetParent rejects a project as its own parent", func(t *testing.T) {
+		projects, website, _, _ := setup(t)
+		if err := projects.SetParent(website.ID, website.ID); err == nil {
+			t.Error("expected an error")
+		}
+		if website.ParentID != "" {
+			t.Error("a rejected assignment must not be applied")
+		}
+	})
+
+	t.Run("SetParent rejects a cycle through a descendant", func(t *testing.T) {
+		projects, website, _, checkout := setup(t)
+		// website -> redesign -> checkout already; filing website under
+		// its own grandchild would close the loop.
+		if err := projects.SetParent(website.ID, checkout.ID); err == nil {
+			t.Error("expected an error")
+		}
+		if website.ParentID != "" {
+			t.Error("a rejected assignment must not be applied")
+		}
+	})
+
+	t.Run("Children and Descendants", func(t *testing.T) {
+		projects, website, redesign, checkout := setup(t)
+		if got := projects.Children(website.ID); len(got) != 1 || got[0] != redesign {
+			t.Errorf("Children(website) = %v, want [redesign]", got)
+		}
+		if got := projects.Children(""); len(got) != 1 || got[0] != website {
+			t.Errorf("Children(\"\") = %v, want [website]", got)
+		}
+		descendants := projects.Descendants(website.ID)
+		if len(descendants) != 2 || descendants[0] != redesign || descendants[1] != checkout {
+			t.Errorf("Descendants(website) = %v, want [redesign checkout]", descendants)
+		}
+		if got := projects.Descendants(checkout.ID); len(got) != 0 {
+			t.Errorf("a leaf project has descendants: %v", got)
+		}
+	})
+
+	t.Run("Path renders the breadcrumb", func(t *testing.T) {
+		projects, _, _, checkout := setup(t)
+		if got := projects.Path(checkout); got != "Website > Redesign > Checkout" {
+			t.Errorf("Path = %q", got)
+		}
+	})
+
+	t.Run("Path stops at a dangling parent reference", func(t *testing.T) {
+		// Only a hand-edited or corrupted file produces this; SetParent
+		// can't. Path must still return something rather than recursing
+		// into a project that is not there.
+		orphan := &Project{ID: "x", Name: "Orphan", ParentID: "no-such-project"}
+		projects := Projects{orphan}
+		if got := projects.Path(orphan); got != "Orphan" {
+			t.Errorf("Path = %q, want %q", got, "Orphan")
+		}
+	})
+
+	t.Run("a dangling reference partway up the chain is not a cycle", func(t *testing.T) {
+		// hasCycle must be able to tell "the chain runs off the edge of
+		// the known projects" apart from "the chain loops": SetParent
+		// only validates the immediate parent, so a corrupted grandparent
+		// reference must not block filing something under a project
+		// whose own ancestry is broken further up.
+		corrupt := &Project{ID: "c", Name: "Corrupt", ParentID: "no-such-project"}
+		projects := Projects{corrupt}
+		leaf := mustProject(t, "Leaf")
+		projects = append(projects, leaf)
+		if err := projects.SetParent(leaf.ID, corrupt.ID); err != nil {
+			t.Errorf("SetParent should not treat a dangling ancestor as a cycle: %v", err)
+		}
+	})
+
+	t.Run("progress rolls subproject tasks up into the parent", func(t *testing.T) {
+		projects, website, redesign, checkout := setup(t)
+		var tasks Tasks
+		if _, err := tasks.Add("Own task", 2, website.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tasks.Add("Redesign task", 3, redesign.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tasks.Add("Checkout task", 1, checkout.ID); err != nil {
+			t.Fatal(err)
+		}
+		tasks[2].SetDone(true) // the checkout task, two levels down
+
+		done, total, _ := projects.TaskProgress(tasks, website.ID)
+		if done != 1 || total != 3 {
+			t.Errorf("TaskProgress(website) = (%d, %d), want (1, 3)", done, total)
+		}
+		_, estimated, _ := projects.EffortProgress(tasks, website.ID)
+		if estimated != 6 {
+			t.Errorf("EffortProgress(website) estimated = %d, want 6", estimated)
+		}
+
+		// The subproject's own totals are unaffected by its parent's.
+		done, total, _ = projects.TaskProgress(tasks, redesign.ID)
+		if done != 1 || total != 2 {
+			t.Errorf("TaskProgress(redesign) = (%d, %d), want (1, 2)", done, total)
+		}
+	})
+
+	t.Run("Delete promotes direct children to the deleted project's parent", func(t *testing.T) {
+		projects, website, redesign, checkout := setup(t)
+		if !projects.Delete(redesign.ID) {
+			t.Fatal("Delete should report success")
+		}
+		if checkout.ParentID != website.ID {
+			t.Errorf("checkout.ParentID = %q, want %q (promoted)", checkout.ParentID, website.ID)
+		}
+	})
+
+	t.Run("Delete promotes children to top-level when the deleted project had no parent", func(t *testing.T) {
+		projects, website, redesign, _ := setup(t)
+		if !projects.Delete(website.ID) {
+			t.Fatal("Delete should report success")
+		}
+		if redesign.ParentID != "" {
+			t.Errorf("redesign.ParentID = %q, want empty", redesign.ParentID)
+		}
+	})
+
+	t.Run("repairHierarchy clears a dangling parent reference", func(t *testing.T) {
+		projects := Projects{{ID: "a", ParentID: "no-such-project"}}
+		projects.repairHierarchy()
+		if projects[0].ParentID != "" {
+			t.Errorf("ParentID = %q, want cleared", projects[0].ParentID)
+		}
+	})
+
+	t.Run("repairHierarchy breaks a cycle written directly to the field", func(t *testing.T) {
+		// SetParent cannot produce this; only a hand-edited or corrupted
+		// file can. repairHierarchy is the safety net for that case.
+		projects := Projects{
+			{ID: "a", ParentID: "b"},
+			{ID: "b", ParentID: "a"},
+		}
+		projects.repairHierarchy()
+		if projects[0].ParentID != "" {
+			t.Errorf("a.ParentID = %q, want cleared", projects[0].ParentID)
+		}
+		if projects[1].ParentID != "a" {
+			t.Errorf("b.ParentID = %q, want unchanged (a is now top-level)", projects[1].ParentID)
+		}
+	})
+
+	t.Run("repairHierarchy clears a project set as its own parent", func(t *testing.T) {
+		projects := Projects{{ID: "a", ParentID: "a"}}
+		projects.repairHierarchy()
+		if projects[0].ParentID != "" {
+			t.Errorf("ParentID = %q, want cleared", projects[0].ParentID)
+		}
+	})
+}

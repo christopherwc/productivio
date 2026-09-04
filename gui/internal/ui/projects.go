@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -57,17 +58,54 @@ func newProjectRow() fyne.CanvasObject {
 	)
 }
 
-// NewProjectsTab builds the project list view: list, add and complete
-// projects — the same surface `pomodoro project` exposes on the
-// command line. (The CLI has no project delete/hold/reopen commands,
-// so neither does this view.)
+// projectEntry pairs a project with its depth in the hierarchy (0 for
+// a top-level project, 1 for its direct subprojects, and so on), so
+// the list can indent subprojects under their parent.
+type projectEntry struct {
+	project *core.Project
+	depth   int
+}
+
+// flattenProjectTree walks the project hierarchy depth-first, roots
+// first, so every subproject is listed immediately after its parent
+// rather than in raw storage order.
+func flattenProjectTree(projects core.Projects) []projectEntry {
+	var out []projectEntry
+	var walk func(p *core.Project, depth int)
+	walk = func(p *core.Project, depth int) {
+		out = append(out, projectEntry{project: p, depth: depth})
+		for _, child := range projects.Children(p.ID) {
+			walk(child, depth+1)
+		}
+	}
+	for _, root := range projects.Children("") {
+		walk(root, 0)
+	}
+	return out
+}
+
+// projectIndent is how far one level of subproject nesting shifts a
+// row's label, matching the two-space-per-level convention `pomodoro
+// project list` uses on the command line.
+const projectIndent = "    "
+
+// NewProjectsTab builds the project list view: list, add (optionally
+// under a parent project) and complete projects — the same surface
+// `pomodoro project` exposes on the command line. Subprojects are
+// shown indented under their parent. (The CLI also supports moving an
+// existing project with `project parent`; this view only files a new
+// one under a parent at creation, since reparenting needs a control
+// this view does not yet have.)
 func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 	var projects core.Projects
 	var tasks core.Tasks
 	var sessions core.Sessions
+	var entries []projectEntry
 
 	var list *widget.List
 	var refresh func()
+	parentSelect := widget.NewSelect([]string{"-"}, nil)
+	parentSelect.SetSelected("-")
 
 	save := func() {
 		_ = env.Store.SaveProjects(projects)
@@ -77,11 +115,21 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 		projects = env.Store.LoadProjects()
 		tasks = env.Store.LoadTasks()
 		sessions = env.Store.LoadSessions()
+		entries = flattenProjectTree(projects)
+
+		parentNames := []string{"-"}
+		for _, p := range projects {
+			parentNames = append(parentNames, p.Name)
+		}
+		parentSelect.Options = parentNames
+		parentSelect.Refresh()
+
 		list.Refresh()
 	}
 	updateRow := func(id widget.ListItemID, obj fyne.CanvasObject) {
 		row := obj.(*fyne.Container).Objects
-		p := projects[id]
+		entry := entries[id]
+		p := entry.project
 		today := env.Today()
 
 		health := row[projectRowHealth].(*canvas.Text)
@@ -89,7 +137,8 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 		health.Color = healthColor(health.Text)
 		health.Refresh()
 
-		row[projectRowLabel].(*widget.Label).SetText(projectRowText(p, projects, tasks, sessions, today))
+		label := strings.Repeat(projectIndent, entry.depth) + projectRowText(p, projects, tasks, sessions, today)
+		row[projectRowLabel].(*widget.Label).SetText(label)
 
 		done := row[projectRowDone].(*widget.Button)
 		done.OnTapped = func() {
@@ -98,7 +147,7 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 		}
 	}
 
-	list = widget.NewList(func() int { return len(projects) }, newProjectRow, updateRow)
+	list = widget.NewList(func() int { return len(entries) }, newProjectRow, updateRow)
 	refresh()
 
 	nameEntry := widget.NewEntry()
@@ -118,20 +167,32 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 			}
 			due = parsed
 		}
-		if _, err := projects.Add(nameEntry.Text, "", due, env.Today()); err != nil {
+		project, err := projects.Add(nameEntry.Text, "", due, env.Today())
+		if err != nil {
 			return
+		}
+		if parentSelect.Selected != "-" {
+			for _, p := range projects {
+				if p.Name == parentSelect.Selected {
+					// Cannot fail: project is brand new, so it cannot
+					// already be an ancestor of p.
+					_ = projects.SetParent(project.ID, p.ID)
+					break
+				}
+			}
 		}
 		nameEntry.SetText("")
 		dueEntry.SetText("")
+		parentSelect.SetSelected("-")
 		save()
 	})
 
-	// See tasks.go's NewTasksTab for why the secondary field is
-	// wrapped at a fixed width instead of both entries sharing an HBox
-	// at their unusably narrow natural size.
+	// See tasks.go's NewTasksTab for why the secondary fields are
+	// wrapped at a fixed width instead of sharing an HBox at their
+	// unusably narrow natural size.
 	trailing := container.NewHBox(
 		container.NewGridWrap(fyne.NewSize(140, dueEntry.MinSize().Height), dueEntry),
-		addButton)
+		parentSelect, addButton)
 	addForm := container.NewBorder(nil, nil, nil, trailing, nameEntry)
 
 	return container.NewBorder(addForm, nil, nil, nil, list)

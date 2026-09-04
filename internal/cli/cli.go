@@ -80,8 +80,9 @@ Usage:
   pomodoro task add <title> [n] [proj]  Add a task estimated at n pomodoros
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
-  pomodoro project list               List projects with progress
-  pomodoro project add <name> [due]   Add a project (due as YYYY-MM-DD)
+  pomodoro project list               List projects, subprojects indented
+  pomodoro project add <name> [due|-] [parent]  Add a project, optionally under parent
+  pomodoro project parent <id> <parent|->  File under parent, or - to clear
   pomodoro project done <id>          Mark a project complete
   pomodoro habit list                 List habits with streaks
   pomodoro habit add <name> [sched]   Add a habit (daily|weekdays|weekends)
@@ -429,7 +430,7 @@ func cmdTask(env *Env, args []string) error {
 
 func cmdProject(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("project needs a subcommand: list, add or done")
+		return usageErrorf("project needs a subcommand: list, add, parent or done")
 	}
 	projects := env.Store.LoadProjects()
 	tasks := env.Store.LoadTasks()
@@ -444,17 +445,27 @@ func cmdProject(env *Env, args []string) error {
 		}
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tPROJECT\tSTATUS\tTASKS\tPOMODOROS\tFOCUSED\tDUE")
-		for _, p := range projects {
+		// Roots first, each followed immediately by its subprojects
+		// indented one level deeper, recursively — a tree, not a flat
+		// list, so a subproject always reads as filed under its parent.
+		var printProject func(p *core.Project, depth int)
+		printProject = func(p *core.Project, depth int) {
 			s := projects.Summarize(p, tasks, sessions, today)
 			due := "-"
 			if !p.Due.IsZero() {
 				due = p.Due.String()
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d/%d (%s)\t%d/%d\t%s\t%s\n",
-				p.ID, p.Name, s.Health,
+			fmt.Fprintf(w, "%s\t%s%s\t%s\t%d/%d (%s)\t%d/%d\t%s\t%s\n",
+				p.ID, strings.Repeat("  ", depth), p.Name, s.Health,
 				s.TasksDone, s.TasksTotal, core.PercentLabel(s.TaskFraction),
 				s.PomodorosDone, s.PomodorosEstimated,
 				core.FormatMinutes(s.Minutes), due)
+			for _, child := range projects.Children(p.ID) {
+				printProject(child, depth+1)
+			}
+		}
+		for _, p := range projects.Children("") {
+			printProject(p, 0)
 		}
 		return w.Flush()
 
@@ -463,21 +474,70 @@ func cmdProject(env *Env, args []string) error {
 			return usageErrorf("project add needs a name")
 		}
 		var due core.Date
-		if len(args) >= 3 {
+		if len(args) >= 3 && args[2] != "-" {
 			parsed, err := core.ParseDate(args[2])
 			if err != nil {
 				return usageErrorf("due date must be YYYY-MM-DD, got %q", args[2])
 			}
 			due = parsed
 		}
+		var parent *core.Project
+		if len(args) >= 4 {
+			p, err := projects.Find(args[3])
+			if err != nil {
+				return err
+			}
+			parent = p
+		}
 		project, err := projects.Add(args[1], "", due, today)
 		if err != nil {
 			return err
+		}
+		if parent != nil {
+			// Cannot fail: project is brand new and cannot already be an
+			// ancestor of parent, so no cycle is possible here.
+			_ = projects.SetParent(project.ID, parent.ID)
 		}
 		if err := env.Store.SaveProjects(projects); err != nil {
 			return err
 		}
 		fmt.Fprintf(env.Out, "Added %s  %s\n", project.ID, project.Name)
+		return nil
+
+	case "parent":
+		if len(args) < 3 {
+			return usageErrorf("project parent needs a project id and a parent id (or - to clear)")
+		}
+		// Resolved up front, before SetParent, so a successful call
+		// never needs to re-look-up either project to report the
+		// result: both are already known to exist.
+		project, err := projects.Find(args[1])
+		if err != nil {
+			return err
+		}
+		var parent *core.Project
+		if args[2] != "-" {
+			p, err := projects.Find(args[2])
+			if err != nil {
+				return err
+			}
+			parent = p
+		}
+		parentID := ""
+		if parent != nil {
+			parentID = parent.ID
+		}
+		if err := projects.SetParent(project.ID, parentID); err != nil {
+			return err
+		}
+		if err := env.Store.SaveProjects(projects); err != nil {
+			return err
+		}
+		if parent == nil {
+			fmt.Fprintf(env.Out, "%s is now top-level\n", project.Name)
+		} else {
+			fmt.Fprintf(env.Out, "%s filed under %s\n", project.Name, parent.Name)
+		}
 		return nil
 
 	case "done":

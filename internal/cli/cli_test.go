@@ -304,6 +304,99 @@ func TestProjectCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("subprojects", func(t *testing.T) {
+		h.run("project", "add", "Parent")
+		parentID := firstID(t, h.stdout())
+
+		h.run("project", "add", "Child", "-", parentID)
+		childID := firstID(t, h.stdout())
+		child, err := h.env.Store.LoadProjects().Find(childID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if child.ParentID != parentID {
+			t.Errorf("ParentID = %q, want %q", child.ParentID, parentID)
+		}
+
+		t.Run("list indents the subproject under its parent", func(t *testing.T) {
+			h.run("project", "list")
+			out := h.stdout()
+			if !strings.Contains(out, "Parent") {
+				t.Fatalf("parent should be listed:\n%s", out)
+			}
+			// printProject indents a child two spaces per depth level,
+			// right after the tabwriter-padded ID column, so the child's
+			// row reads "  Child" where the root's reads "Parent".
+			found := false
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(line, "  Child") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("subproject row should be indented:\n%s", out)
+			}
+		})
+
+		t.Run("a subproject's tasks roll up into the parent", func(t *testing.T) {
+			h.run("task", "add", "Subtask", "2", childID)
+			taskID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+			h.run("task", "done", taskID)
+
+			h.run("project", "list")
+			out := h.stdout()
+			if !strings.Contains(out, "1/1 (100%)") {
+				t.Errorf("parent should show the subproject's task as its own:\n%s", out)
+			}
+		})
+
+		t.Run("parent reassigns and clears", func(t *testing.T) {
+			h.run("project", "add", "Other")
+			otherID := firstID(t, h.stdout())
+
+			if code := h.run("project", "parent", childID, otherID); code != exitOK {
+				t.Fatalf("code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "filed under") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			reloaded, err := h.env.Store.LoadProjects().Find(childID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reloaded.ParentID != otherID {
+				t.Errorf("ParentID = %q, want %q", reloaded.ParentID, otherID)
+			}
+
+			if code := h.run("project", "parent", childID, "-"); code != exitOK {
+				t.Fatalf("code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "top-level") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			reloaded, err = h.env.Store.LoadProjects().Find(childID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reloaded.ParentID != "" {
+				t.Errorf("ParentID = %q, want cleared", reloaded.ParentID)
+			}
+		})
+
+		t.Run("parent rejects a cycle", func(t *testing.T) {
+			// The previous subtest cleared child's parent; re-establish
+			// parent -> child before checking that the reverse would
+			// close a cycle.
+			if code := h.run("project", "parent", childID, parentID); code != exitOK {
+				t.Fatalf("code = %d: %s", code, h.stderr())
+			}
+			if code := h.run("project", "parent", parentID, childID); code == exitOK {
+				t.Error("expected a non-zero exit code")
+			}
+		})
+	})
+
 	t.Run("argument errors", func(t *testing.T) {
 		cases := [][]string{
 			{"project"},
@@ -311,6 +404,9 @@ func TestProjectCommands(t *testing.T) {
 			{"project", "add"},
 			{"project", "add", "   "},
 			{"project", "add", "P", "not-a-date"},
+			{"project", "add", "P", "-", "no-such-project"},
+			{"project", "parent"},
+			{"project", "parent", "no-such-project", "-"},
 			{"project", "done"},
 			{"project", "done", "no-such-project"},
 		}
@@ -614,14 +710,15 @@ func TestSaveFailuresSurface(t *testing.T) {
 	}
 
 	commands := map[string]func(ids map[string]string) []string{
-		"task add":     func(map[string]string) []string { return []string{"task", "add", "New"} },
-		"task done":    func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
-		"task rm":      func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
-		"project add":  func(map[string]string) []string { return []string{"project", "add", "New"} },
-		"project done": func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
-		"habit add":    func(map[string]string) []string { return []string{"habit", "add", "New"} },
-		"habit check":  func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
-		"start":        func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },
+		"task add":       func(map[string]string) []string { return []string{"task", "add", "New"} },
+		"task done":      func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
+		"task rm":        func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
+		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
+		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
+		"project done":   func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
+		"habit add":      func(map[string]string) []string { return []string{"habit", "add", "New"} },
+		"habit check":    func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
+		"start":          func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },
 		"start -task": func(i map[string]string) []string {
 			return []string{"start", "-work", "1", "-rest", "1", "-task", i["task"]}
 		},
