@@ -106,7 +106,7 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 	dueEntry := widget.NewEntry()
 	dueEntry.SetPlaceHolder("Due (YYYY-MM-DD)")
 
-	addForm := container.NewBorder(nil, nil, nil, widget.NewButton("Add", func() {
+	addButton := widget.NewButton("Add", func() {
 		if nameEntry.Text == "" {
 			return
 		}
@@ -124,7 +124,15 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 		nameEntry.SetText("")
 		dueEntry.SetText("")
 		save()
-	}), container.NewHBox(nameEntry, dueEntry))
+	})
+
+	// See tasks.go's NewTasksTab for why the secondary field is
+	// wrapped at a fixed width instead of both entries sharing an HBox
+	// at their unusably narrow natural size.
+	trailing := container.NewHBox(
+		container.NewGridWrap(fyne.NewSize(140, dueEntry.MinSize().Height), dueEntry),
+		addButton)
+	addForm := container.NewBorder(nil, nil, nil, trailing, nameEntry)
 
 	return container.NewBorder(addForm, nil, nil, nil, list)
 }

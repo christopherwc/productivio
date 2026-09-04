@@ -109,7 +109,7 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 	projectSelect := widget.NewSelect(projectNames, nil)
 	projectSelect.SetSelected("-")
 
-	addForm := container.NewBorder(nil, nil, nil, widget.NewButton("Add", func() {
+	addButton := widget.NewButton("Add", func() {
 		if titleEntry.Text == "" {
 			return
 		}
@@ -133,7 +133,17 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		estimateEntry.SetText("")
 		projectSelect.SetSelected("-")
 		save()
-	}), container.NewHBox(titleEntry, estimateEntry, projectSelect))
+	})
+
+	// An Entry's minimum size is barely wider than its cursor — it does
+	// not grow to fit its placeholder text — so the estimate field is
+	// wrapped at a fixed width and the title field is given the
+	// Border's stretching center slot, rather than both being packed
+	// into an HBox at their unusably narrow natural size.
+	trailing := container.NewHBox(
+		container.NewGridWrap(fyne.NewSize(90, estimateEntry.MinSize().Height), estimateEntry),
+		projectSelect, addButton)
+	addForm := container.NewBorder(nil, nil, nil, trailing, titleEntry)
 
 	return container.NewBorder(addForm, nil, nil, nil, list)
 }
