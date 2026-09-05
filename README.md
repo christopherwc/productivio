@@ -87,11 +87,14 @@ pomodoro project list                    # copy the id
 pomodoro project add "Checkout redesign" - <project-id>   # a subproject
 pomodoro project parent <id> <parent-id> # file an existing project under another
 pomodoro task add "Write docs" 4 <project-id>
-pomodoro task list
+pomodoro task add "File taxes" 1 - 2026-10-15   # due date, no project
+pomodoro task list                       # DUE column, flagged once overdue
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
 pomodoro habit check <habit-id>
 pomodoro history 20
+pomodoro report                          # focus time by project, last 7 days
+pomodoro report 30                       # widen the window
 pomodoro where                           # where your data lives
 ```
 
@@ -107,6 +110,19 @@ progress rolls up into every one of its ancestors, at any depth. The
 tree rejects cycles: a project can never become its own ancestor.
 Deleting a project promotes its direct subprojects up one level rather
 than orphaning them.
+
+A task can carry its own due date, independent of its project's —
+useful since a project's deadline says when the whole thing is due, not
+when each piece of it needs to happen. `status` and `task list` flag an
+open task whose date has passed; a done task is never flagged, however
+late it finished.
+
+`report` breaks focused time down by project over a trailing window
+(7 days by default), sorted by minutes so the projects worked on most
+show first — the same session records `history` lists individually,
+rolled up instead of itemized. A session's project is stored on the
+session itself, so a report still totals correctly under a project's
+name even after it has since been renamed or deleted.
 
 ## How progress is measured
 

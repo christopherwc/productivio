@@ -27,6 +27,7 @@ type Task struct {
 	Created     Timestamp `json:"created"`
 	CompletedAt *string   `json:"completed_at"`
 	ProjectID   string    `json:"project_id"` // owning project, or empty
+	Due         Date      `json:"due"`        // deadline, or the zero Date for none
 }
 
 // Tasks is the ordered task list.
@@ -83,6 +84,26 @@ func (t *Task) Remaining() int {
 		return 0
 	}
 	return t.Estimate - t.Completed
+}
+
+// IsOverdue reports whether the deadline has passed with the task
+// still open. A done task, or one with no due date, is never overdue —
+// mirroring Project.IsOverdue.
+func (t *Task) IsOverdue(today Date) bool {
+	if t.Done || t.Due.IsZero() {
+		return false
+	}
+	return t.Due.Before(today)
+}
+
+// DaysUntilDue counts days to the deadline, negative when overdue. The
+// second result is false when there is no deadline, since zero days is
+// a meaningful value that must not be confused with "unset".
+func (t *Task) DaysUntilDue(today Date) (int, bool) {
+	if t.Due.IsZero() {
+		return 0, false
+	}
+	return today.DaysUntil(t.Due), true
 }
 
 // SetDone marks the task complete or reopens it, stamping or clearing
@@ -197,9 +218,10 @@ func (ts Tasks) DetachFromProject(projectID string) int {
 	return moved
 }
 
-// TaskStats reports the open and finished counts plus the estimated
-// pomodoros still outstanding across the open tasks.
-func (ts Tasks) TaskStats() (open, done, remaining int) {
+// TaskStats reports the open and finished counts, the estimated
+// pomodoros still outstanding across the open tasks, and how many open
+// tasks are overdue.
+func (ts Tasks) TaskStats(today Date) (open, done, remaining, overdue int) {
 	for _, t := range ts {
 		if t.Done {
 			done++
@@ -207,6 +229,9 @@ func (ts Tasks) TaskStats() (open, done, remaining int) {
 		}
 		open++
 		remaining += t.Remaining()
+		if t.IsOverdue(today) {
+			overdue++
+		}
 	}
-	return open, done, remaining
+	return open, done, remaining, overdue
 }

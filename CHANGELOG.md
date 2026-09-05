@@ -80,6 +80,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GUI blue/grey theme.** Replaces Fyne's default palette with a
   custom blue-accent, slate-grey theme (light and dark variants),
   verified against the real binary under Xvfb.
+- **Task due dates.** A task can carry its own deadline, independent of
+  its project's — `pomodoro task add <title> [n] [proj|-] [due]`, or a
+  due-date field on the GUI add-task form. `task list`, the GUI tasks
+  view, and both `status` outputs flag an open task whose date has
+  passed; a done task is never flagged, however late it finished.
+  Mirrors `Project.IsOverdue`/`DaysUntilDue`, so the same "overdue"
+  concept now applies at both the project and the task level.
+- **Focus-time report.** `pomodoro report [n]` (default 7 days) and a
+  new GUI Report tab break focused time down by project over a
+  trailing window, sorted by minutes so the most-worked-on projects
+  show first. Built on a new `Sessions.Report`, grouped by each
+  session's own recorded project name rather than a live `Projects`
+  lookup, so a report still totals correctly under a project's old
+  name even after it has since been renamed or deleted — the same
+  reason `Session` already stored that name instead of only the id.
 
 ### Fixed
 

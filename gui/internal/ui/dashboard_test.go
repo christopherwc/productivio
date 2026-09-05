@@ -85,3 +85,23 @@ func TestNewDashboard(t *testing.T) {
 		}
 	}
 }
+
+func TestNewDashboardFlagsOverdueTasks(t *testing.T) {
+	store := &fakeStore{}
+
+	task, err := store.tasks.Add("Overdue thing", 1, "")
+	if err != nil {
+		t.Fatalf("tasks.Add() error = %v", err)
+	}
+	task.Due = core.NewDate(2026, time.August, 1)
+
+	env := &app.Env{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, time.September, 3, 12, 0, 0, 0, time.UTC) },
+	}
+
+	joined := strings.Join(labelTexts(t, NewDashboard(env)), "\n")
+	if !strings.Contains(joined, "1 overdue") {
+		t.Errorf("dashboard text = %q, want it to flag the overdue task", joined)
+	}
+}

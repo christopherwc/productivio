@@ -17,6 +17,7 @@ func NewWindow(a fyne.App, env *app.Env) fyne.Window {
 		container.NewTabItem("Projects", NewProjectsTab(env)),
 		container.NewTabItem("Habits", NewHabitsTab(env)),
 		container.NewTabItem("Timer", NewTimerTab(env)),
+		container.NewTabItem("Report", NewReportTab(env)),
 	)
 	w.SetContent(tabs)
 	w.SetMainMenu(buildMenu(a, w))

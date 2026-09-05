@@ -147,6 +147,14 @@ func TestStatus(t *testing.T) {
 			t.Errorf("status should flag the overdue project:\n%s", h.stdout())
 		}
 	})
+
+	t.Run("reports overdue tasks", func(t *testing.T) {
+		h.run("task", "add", "Overdue thing", "1", "-", "2026-08-01")
+		h.run("status")
+		if !strings.Contains(h.stdout(), "1 overdue") {
+			t.Errorf("status should flag the overdue task:\n%s", h.stdout())
+		}
+	})
 }
 
 func TestTaskCommands(t *testing.T) {
@@ -201,6 +209,44 @@ func TestTaskCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("due dates", func(t *testing.T) {
+		h.run("task", "add", "Ship it", "2", "-", "2026-08-01")
+		taskID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+		task, err := h.env.Store.LoadTasks().Find(taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.Due.String() != "2026-08-01" {
+			t.Errorf("Due = %q, want 2026-08-01", task.Due.String())
+		}
+
+		t.Run("list flags it overdue", func(t *testing.T) {
+			h.run("task", "list")
+			out := h.stdout()
+			if !strings.Contains(out, "2026-08-01 (overdue)") {
+				t.Errorf("list should flag the overdue task:\n%s", out)
+			}
+		})
+
+		t.Run("a completed overdue task is not flagged", func(t *testing.T) {
+			h.run("task", "done", taskID)
+			h.run("task", "list")
+			out := h.stdout()
+			if strings.Contains(out, "(overdue)") {
+				t.Errorf("a done task should not be flagged overdue:\n%s", out)
+			}
+			h.run("task", "done", taskID) // put it back
+		})
+
+		t.Run("a task with no due date shows a dash", func(t *testing.T) {
+			h.run("task", "add", "No deadline")
+			h.run("task", "list")
+			if !strings.Contains(h.stdout(), "No deadline") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+	})
+
 	t.Run("done toggles both ways", func(t *testing.T) {
 		taskID := h.env.Store.LoadTasks()[0].ID
 		h.run("task", "done", taskID)
@@ -236,6 +282,7 @@ func TestTaskCommands(t *testing.T) {
 			{"task", "add", "  "},
 			{"task", "add", "T", "not-a-number"},
 			{"task", "add", "T", "1", "no-such-project"},
+			{"task", "add", "T", "1", "-", "not-a-date"},
 			{"task", "done"},
 			{"task", "done", "no-such-task"},
 			{"task", "rm"},
@@ -407,6 +454,7 @@ func TestProjectCommands(t *testing.T) {
 			{"project", "add", "P", "-", "no-such-project"},
 			{"project", "parent"},
 			{"project", "parent", "no-such-project", "-"},
+			{"project", "parent", projectID, "no-such-project"},
 			{"project", "done"},
 			{"project", "done", "no-such-project"},
 		}
@@ -644,6 +692,92 @@ func TestHistoryCommand(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestReportCommand(t *testing.T) {
+	h := newHarness(t)
+
+	t.Run("no sessions", func(t *testing.T) {
+		h.run("report")
+		out := h.stdout()
+		if !strings.Contains(out, "Last 7 days: 0 pomodoros (0m)") {
+			t.Errorf("header missing:\n%s", out)
+		}
+		if !strings.Contains(out, "No sessions in this window") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
+	h.run("project", "add", "Website")
+	projectID := firstID(t, h.stdout())
+	h.run("task", "add", "Design", "3", projectID)
+	taskID := h.env.Store.LoadTasks()[0].ID
+	h.run("start", "-work", "10", "-rest", "1", "-task", taskID)
+	h.run("start", "-work", "5", "-rest", "1")
+
+	t.Run("breaks totals down by project, most-focused first", func(t *testing.T) {
+		h.run("report")
+		out := h.stdout()
+		if !strings.Contains(out, "Last 7 days: 2 pomodoros (15m)") {
+			t.Errorf("header missing:\n%s", out)
+		}
+		websiteLine, dashLine := -1, -1
+		for i, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "Website") {
+				websiteLine = i
+			}
+			if strings.HasPrefix(line, "-") {
+				dashLine = i
+			}
+		}
+		if websiteLine == -1 || dashLine == -1 {
+			t.Fatalf("expected both a Website row and an unattributed row:\n%s", out)
+		}
+		if websiteLine > dashLine {
+			t.Errorf("Website (10m) should sort ahead of unattributed work (5m):\n%s", out)
+		}
+	})
+
+	t.Run("a window that excludes older sessions can be widened", func(t *testing.T) {
+		saveOldSession(t, h, 30, 25)
+		h.run("report")
+		if !strings.Contains(h.stdout(), "Last 7 days: 2 pomodoros (15m)") {
+			t.Errorf("a 30-day-old session should not count in the default 7-day window:\n%s", h.stdout())
+		}
+		h.run("report", "60")
+		if !strings.Contains(h.stdout(), "Last 60 days: 3 pomodoros (40m)") {
+			t.Errorf("widening the window should include it:\n%s", h.stdout())
+		}
+	})
+
+	t.Run("a single day uses the singular noun", func(t *testing.T) {
+		h.run("report", "1")
+		if !strings.Contains(h.stdout(), "Last 1 day:") {
+			t.Errorf("output = %q", h.stdout())
+		}
+	})
+
+	t.Run("argument errors", func(t *testing.T) {
+		for _, arg := range []string{"abc", "0", "-3"} {
+			if code := h.run("report", arg); code == exitOK {
+				t.Errorf("report %q should have failed", arg)
+			}
+		}
+	})
+}
+
+// saveOldSession saves one extra unattributed session dated daysAgo
+// before the harness's fixed clock, directly through the store — the
+// only way to get a session outside "today" without a clock that
+// advances.
+func saveOldSession(t *testing.T, h *harness, daysAgo, workMinutes int) {
+	t.Helper()
+	start := fixedNow.AddDate(0, 0, -daysAgo)
+	sessions := append(h.env.Store.LoadSessions(),
+		core.NewSession(start, start.Add(time.Duration(workMinutes)*time.Minute), workMinutes, nil, nil))
+	if err := h.env.Store.SaveSessions(sessions); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // failingStore wraps a real store but refuses every write.
