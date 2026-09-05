@@ -91,6 +91,7 @@ pomodoro project rm <id>                 # delete it (tasks unfiled, subprojects
 pomodoro task add "Write docs" 4 <project-id>
 pomodoro task add "File taxes" 1 - 2026-10-15   # due date, no project
 pomodoro task list                       # DUE column, flagged once overdue
+pomodoro task clear                      # delete every completed task
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
 pomodoro habit check <habit-id>

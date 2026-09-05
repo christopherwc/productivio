@@ -104,6 +104,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and deleting one without losing its tasks (unfiled, not deleted) or
   orphaning its subprojects (promoted up one level, as `Delete` already
   guaranteed).
+- **Task clear.** `Tasks.ClearCompleted` existed and was fully tested,
+  but had no command or GUI control either. `pomodoro task clear` and
+  a "Clear done" button on the GUI tasks view now expose it: delete
+  every completed task in one step instead of removing them one at a
+  time with `task rm`.
 
 ### Fixed
 
