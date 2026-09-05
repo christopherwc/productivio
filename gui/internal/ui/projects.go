@@ -48,6 +48,9 @@ const (
 	projectRowHealth = iota
 	projectRowLabel
 	projectRowDone
+	projectRowHold
+	projectRowReopen
+	projectRowDelete
 )
 
 func newProjectRow() fyne.CanvasObject {
@@ -55,6 +58,9 @@ func newProjectRow() fyne.CanvasObject {
 		canvas.NewText("", color.Black),
 		widget.NewLabel(""),
 		widget.NewButton("Done", nil),
+		widget.NewButton("Hold", nil),
+		widget.NewButton("Reopen", nil),
+		widget.NewButton("✕", nil),
 	)
 }
 
@@ -90,12 +96,12 @@ func flattenProjectTree(projects core.Projects) []projectEntry {
 const projectIndent = "    "
 
 // NewProjectsTab builds the project list view: list, add (optionally
-// under a parent project) and complete projects — the same surface
-// `pomodoro project` exposes on the command line. Subprojects are
-// shown indented under their parent. (The CLI also supports moving an
-// existing project with `project parent`; this view only files a new
-// one under a parent at creation, since reparenting needs a control
-// this view does not yet have.)
+// under a parent project), complete, hold, reopen and delete projects
+// — the same surface `pomodoro project` exposes on the command line.
+// Subprojects are shown indented under their parent. (The CLI also
+// supports moving an existing project with `project parent`; this
+// view only files a new one under a parent at creation, since
+// reparenting needs a control this view does not yet have.)
 func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 	var projects core.Projects
 	var tasks core.Tasks
@@ -143,6 +149,28 @@ func NewProjectsTab(env *app.Env) fyne.CanvasObject {
 		done := row[projectRowDone].(*widget.Button)
 		done.OnTapped = func() {
 			p.Complete()
+			save()
+		}
+
+		hold := row[projectRowHold].(*widget.Button)
+		hold.OnTapped = func() {
+			p.Hold()
+			save()
+		}
+
+		reopen := row[projectRowReopen].(*widget.Button)
+		reopen.OnTapped = func() {
+			p.Reopen()
+			save()
+		}
+
+		del := row[projectRowDelete].(*widget.Button)
+		del.OnTapped = func() {
+			// Its tasks are not deleted, only unfiled; see
+			// Tasks.DetachFromProject and Projects.Delete.
+			tasks.DetachFromProject(p.ID)
+			projects.Delete(p.ID)
+			_ = env.Store.SaveTasks(tasks)
 			save()
 		}
 	}

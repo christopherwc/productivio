@@ -86,6 +86,8 @@ pomodoro project add "Ship v1" 2026-09-30
 pomodoro project list                    # copy the id
 pomodoro project add "Checkout redesign" - <project-id>   # a subproject
 pomodoro project parent <id> <parent-id> # file an existing project under another
+pomodoro project hold <id>               # pause it; reopen brings it back
+pomodoro project rm <id>                 # delete it (tasks unfiled, subprojects promoted)
 pomodoro task add "Write docs" 4 <project-id>
 pomodoro task add "File taxes" 1 - 2026-10-15   # due date, no project
 pomodoro task list                       # DUE column, flagged once overdue
