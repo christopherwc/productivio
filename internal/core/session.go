@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Session is one completed work phase, the permanent record of a
 // pomodoro.
@@ -73,6 +76,55 @@ func (ss Sessions) ProjectMinutes(projectID string) int {
 		total += s.WorkMinutes
 	}
 	return total
+}
+
+// ProjectTotal is one project's rolled-up focus time within a report
+// window. ProjectName is "" for unattributed work — sessions with no
+// project credited.
+//
+// The name comes from the session records themselves, not a Projects
+// lookup, so a report still shows correctly under a project's old name
+// even after it has been renamed or deleted; that is exactly why
+// Session stores its own copy of the name rather than only the id.
+type ProjectTotal struct {
+	ProjectID   string
+	ProjectName string
+	Sessions    int
+	Minutes     int
+}
+
+// Report totals focused time per project across every session on or
+// after since, ordered by minutes descending (ties broken by name) so
+// the projects worked on most show first.
+func (ss Sessions) Report(since Date) []ProjectTotal {
+	totals := map[string]*ProjectTotal{}
+	var order []string
+	for _, s := range ss {
+		if s.Day().Before(since) {
+			continue
+		}
+		key := s.ProjectID // "" is a valid key: unattributed work
+		t, ok := totals[key]
+		if !ok {
+			t = &ProjectTotal{ProjectID: s.ProjectID, ProjectName: s.ProjectName}
+			totals[key] = t
+			order = append(order, key)
+		}
+		t.Sessions++
+		t.Minutes += s.WorkMinutes
+	}
+
+	out := make([]ProjectTotal, 0, len(order))
+	for _, key := range order {
+		out = append(out, *totals[key])
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Minutes != out[j].Minutes {
+			return out[i].Minutes > out[j].Minutes
+		}
+		return out[i].ProjectName < out[j].ProjectName
+	})
+	return out
 }
 
 func (ss Sessions) filter(keep func(*Session) bool) Sessions {

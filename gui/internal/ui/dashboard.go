@@ -26,9 +26,12 @@ func NewDashboard(env *app.Env) fyne.CanvasObject {
 		"Today: %d pomodoros (%s)   All time: %d",
 		count, core.FormatMinutes(minutes), len(sessions)))
 
-	open, done, remaining := tasks.TaskStats()
-	tasksLine := widget.NewLabel(fmt.Sprintf(
-		"Tasks: %d open, %d done, %d pomodoros remaining", open, done, remaining))
+	open, done, remaining, overdue := tasks.TaskStats(today)
+	tasksText := fmt.Sprintf("Tasks: %d open, %d done, %d pomodoros remaining", open, done, remaining)
+	if overdue > 0 {
+		tasksText += fmt.Sprintf(", %d overdue", overdue)
+	}
+	tasksLine := widget.NewLabel(tasksText)
 
 	return container.NewVBox(
 		todayLine,

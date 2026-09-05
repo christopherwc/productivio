@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"fmt"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,14 +13,23 @@ import (
 )
 
 // taskRowText is the single-line label for one task row: title,
-// project (if any) and progress. Kept separate from the widget wiring
-// below so it can be tested without a Fyne driver.
-func taskRowText(t *core.Task, projects core.Projects) string {
-	if t.ProjectID == "" {
-		return fmt.Sprintf("%s  ·  %s", t.Title, t.ProgressLabel())
+// project (if any), progress, and due date (if any, flagged when
+// overdue). Kept separate from the widget wiring below so it can be
+// tested without a Fyne driver.
+func taskRowText(t *core.Task, projects core.Projects, today core.Date) string {
+	parts := []string{t.Title}
+	if t.ProjectID != "" {
+		parts = append(parts, projects.NameOf(t.ProjectID, "-"))
 	}
-	return fmt.Sprintf("%s  ·  %s  ·  %s",
-		t.Title, projects.NameOf(t.ProjectID, "-"), t.ProgressLabel())
+	parts = append(parts, t.ProgressLabel())
+	if !t.Due.IsZero() {
+		due := "due " + t.Due.String()
+		if t.IsOverdue(today) {
+			due += " (overdue)"
+		}
+		parts = append(parts, due)
+	}
+	return strings.Join(parts, "  ·  ")
 }
 
 // Row indices into the container newTaskRow builds, so updateItem can
@@ -78,7 +87,7 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		}
 		check.Refresh()
 
-		row[taskRowLabel].(*widget.Label).SetText(taskRowText(task, projects))
+		row[taskRowLabel].(*widget.Label).SetText(taskRowText(task, projects, env.Today()))
 
 		row[taskRowUp].(*widget.Button).OnTapped = func() {
 			tasks.Move(task.ID, -1)
@@ -101,6 +110,8 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 	titleEntry.SetPlaceHolder("New task")
 	estimateEntry := widget.NewEntry()
 	estimateEntry.SetPlaceHolder("Pomodoros")
+	dueEntry := widget.NewEntry()
+	dueEntry.SetPlaceHolder("Due (YYYY-MM-DD)")
 
 	projectNames := []string{"-"}
 	for _, p := range projects {
@@ -126,23 +137,37 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 				}
 			}
 		}
-		if _, err := tasks.Add(titleEntry.Text, estimate, projectID); err != nil {
+		var due core.Date
+		if dueEntry.Text != "" {
+			parsed, err := core.ParseDate(dueEntry.Text)
+			if err != nil {
+				return
+			}
+			due = parsed
+		}
+		task, err := tasks.Add(titleEntry.Text, estimate, projectID)
+		if err != nil {
 			return
 		}
+		task.Due = due
 		titleEntry.SetText("")
 		estimateEntry.SetText("")
+		dueEntry.SetText("")
 		projectSelect.SetSelected("-")
 		save()
 	})
 
-	// An Entry's minimum size is barely wider than its cursor — it does
-	// not grow to fit its placeholder text — so the estimate field is
-	// wrapped at a fixed width and the title field is given the
-	// Border's stretching center slot, rather than both being packed
-	// into an HBox at their unusably narrow natural size.
+	// See the due-entry width below: an Entry's minimum size is barely
+	// wider than its cursor — it does not grow to fit its placeholder
+	// text — so every secondary field is wrapped at a fixed width and
+	// the title field is given the Border's stretching center slot,
+	// rather than all of them being packed into an HBox at their
+	// unusably narrow natural size.
 	trailing := container.NewHBox(
 		container.NewGridWrap(fyne.NewSize(90, estimateEntry.MinSize().Height), estimateEntry),
-		projectSelect, addButton)
+		projectSelect,
+		container.NewGridWrap(fyne.NewSize(140, dueEntry.MinSize().Height), dueEntry),
+		addButton)
 	addForm := container.NewBorder(nil, nil, nil, trailing, titleEntry)
 
 	return container.NewBorder(addForm, nil, nil, nil, list)

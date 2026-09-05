@@ -371,6 +371,60 @@ func TestSessions(t *testing.T) {
 			t.Errorf("expected empty attribution, got %+v", s)
 		}
 	})
+
+	t.Run("Report totals by project within the window, newest activity included", func(t *testing.T) {
+		// Only today's two Website sessions fall on or after fixedToday;
+		// yesterday's unattributed one is outside the window.
+		got := sessions.Report(fixedToday)
+		if len(got) != 1 {
+			t.Fatalf("got %d project totals, want 1: %+v", len(got), got)
+		}
+		if got[0].ProjectID != project.ID || got[0].ProjectName != "Website" ||
+			got[0].Sessions != 2 || got[0].Minutes != 75 {
+			t.Errorf("got %+v", got[0])
+		}
+	})
+
+	t.Run("Report widens to include unattributed work and sorts by minutes", func(t *testing.T) {
+		got := sessions.Report(fixedToday.AddDays(-1))
+		if len(got) != 2 {
+			t.Fatalf("got %d project totals, want 2: %+v", len(got), got)
+		}
+		// Website (75m) must sort ahead of the unattributed 25m entry.
+		if got[0].ProjectName != "Website" || got[0].Minutes != 75 {
+			t.Errorf("first = %+v, want Website with 75m", got[0])
+		}
+		if got[1].ProjectID != "" || got[1].ProjectName != "" ||
+			got[1].Sessions != 1 || got[1].Minutes != 25 {
+			t.Errorf("second = %+v, want the unattributed 25m entry", got[1])
+		}
+	})
+
+	t.Run("Report on an empty history is empty, not nil-panicking", func(t *testing.T) {
+		var empty Sessions
+		if got := empty.Report(fixedToday); len(got) != 0 {
+			t.Errorf("got %d, want 0", len(got))
+		}
+	})
+
+	t.Run("Report breaks an equal-minutes tie alphabetically by name", func(t *testing.T) {
+		alpha, err := NewProject("Alpha", "", Date{}, fixedToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		beta, err := NewProject("Beta", "", Date{}, fixedToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tied := Sessions{
+			NewSession(start, start.Add(10*time.Minute), 10, nil, beta),
+			NewSession(start, start.Add(10*time.Minute), 10, nil, alpha),
+		}
+		got := tied.Report(fixedToday)
+		if len(got) != 2 || got[0].ProjectName != "Alpha" || got[1].ProjectName != "Beta" {
+			t.Errorf("got %+v, want Alpha before Beta despite matching minutes", got)
+		}
+	})
 }
 
 func TestNewTask(t *testing.T) {
@@ -406,6 +460,49 @@ func TestNewTask(t *testing.T) {
 				t.Fatalf("duplicate id %q after %d draws", id, i)
 			}
 			seen[id] = true
+		}
+	})
+}
+
+func TestTaskDeadlines(t *testing.T) {
+	task := func(due Date) *Task {
+		task := mustTask(t, "T", 1, "")
+		task.Due = due
+		return task
+	}
+
+	t.Run("no due date is never overdue and has no days-until value", func(t *testing.T) {
+		task := task(Date{})
+		if task.IsOverdue(fixedToday) {
+			t.Error("a task with no due date can never be overdue")
+		}
+		if days, ok := task.DaysUntilDue(fixedToday); ok || days != 0 {
+			t.Errorf("got (%d, %v), want (0, false)", days, ok)
+		}
+	})
+
+	t.Run("a past due date on an open task is overdue", func(t *testing.T) {
+		task := task(NewDate(2026, time.August, 30))
+		if !task.IsOverdue(fixedToday) {
+			t.Error("a passed deadline on an open task should be overdue")
+		}
+		if days, ok := task.DaysUntilDue(fixedToday); !ok || days != -3 {
+			t.Errorf("got (%d, %v), want (-3, true)", days, ok)
+		}
+	})
+
+	t.Run("a future due date is not overdue", func(t *testing.T) {
+		task := task(NewDate(2026, time.September, 30))
+		if task.IsOverdue(fixedToday) {
+			t.Error("a future deadline should not be overdue")
+		}
+	})
+
+	t.Run("a done task is never overdue, however late", func(t *testing.T) {
+		task := task(NewDate(2026, time.August, 1))
+		task.SetDone(true)
+		if task.IsOverdue(fixedToday) {
+			t.Error("a done task is never overdue")
 		}
 	})
 }
@@ -538,9 +635,21 @@ func TestTaskOperations(t *testing.T) {
 		tasks, a, _, c := newList(t)
 		a.Completed = 1 // one of two
 		c.SetDone(true)
-		open, done, remaining := tasks.TaskStats()
-		if open != 2 || done != 1 || remaining != 1+3 {
-			t.Errorf("got (%d, %d, %d), want (2, 1, 4)", open, done, remaining)
+		open, done, remaining, overdue := tasks.TaskStats(fixedToday)
+		if open != 2 || done != 1 || remaining != 1+3 || overdue != 0 {
+			t.Errorf("got (%d, %d, %d, %d), want (2, 1, 4, 0)", open, done, remaining, overdue)
+		}
+	})
+
+	t.Run("TaskStats counts open overdue tasks", func(t *testing.T) {
+		tasks, a, b, c := newList(t)
+		a.Due = NewDate(2026, time.August, 1) // overdue: open, past
+		b.Due = NewDate(2026, time.August, 1)
+		b.SetDone(true) // done, so not overdue despite the past date
+		_ = c
+		_, _, _, overdue := tasks.TaskStats(fixedToday)
+		if overdue != 1 {
+			t.Errorf("overdue = %d, want 1", overdue)
 		}
 	})
 
@@ -550,7 +659,7 @@ func TestTaskOperations(t *testing.T) {
 		if got := a.Remaining(); got != 0 {
 			t.Errorf("Remaining = %d, want 0", got)
 		}
-		_, _, remaining := tasks.TaskStats()
+		_, _, remaining, _ := tasks.TaskStats(fixedToday)
 		if remaining != 3+1 {
 			t.Errorf("remaining = %d, want 4", remaining)
 		}
