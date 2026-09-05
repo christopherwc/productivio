@@ -76,8 +76,8 @@ const usage = `pomodoro — a focus timer with tasks, habits and projects
 Usage:
   pomodoro status                     Today's summary
   pomodoro start [flags]              Run a work interval
-  pomodoro task list                  List tasks
-  pomodoro task add <title> [n] [proj]  Add a task estimated at n pomodoros
+  pomodoro task list                   List tasks, due dates and overdue flags
+  pomodoro task add <title> [n] [proj|-] [due]  Add a task, optionally due YYYY-MM-DD
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
   pomodoro project list               List projects, subprojects indented
@@ -88,6 +88,7 @@ Usage:
   pomodoro habit add <name> [sched]   Add a habit (daily|weekdays|weekends)
   pomodoro habit check <id>           Toggle today's completion
   pomodoro history [n]                Show the last n sessions (default 10)
+  pomodoro report [n]                  Focus time by project, last n days (default 7)
   pomodoro where                      Print the data directory
   pomodoro version                    Print version information
 
@@ -156,6 +157,8 @@ func Dispatch(env *Env, args []string) int {
 		err = cmdHabit(env, rest)
 	case "history":
 		err = cmdHistory(env, rest)
+	case "report":
+		err = cmdReport(env, rest)
 	case "where":
 		fmt.Fprintln(env.Out, env.Store.Dir())
 	case "version":
@@ -199,9 +202,12 @@ func cmdStatus(env *Env) error {
 	fmt.Fprintf(env.Out, "Today: %d pomodoros (%s)   All time: %d\n\n",
 		count, core.FormatMinutes(minutes), len(sessions))
 
-	open, done, remaining := tasks.TaskStats()
-	fmt.Fprintf(env.Out, "Tasks:    %d open, %d done, %d pomodoros remaining\n",
-		open, done, remaining)
+	open, done, remaining, overdue := tasks.TaskStats(today)
+	fmt.Fprintf(env.Out, "Tasks:    %d open, %d done, %d pomodoros remaining", open, done, remaining)
+	if overdue > 0 {
+		fmt.Fprintf(env.Out, ", %d overdue", overdue)
+	}
+	fmt.Fprintln(env.Out)
 
 	scheduled, completed := habits.Stats(today)
 	if scheduled == 0 {
@@ -339,6 +345,7 @@ func cmdTask(env *Env, args []string) error {
 	}
 	tasks := env.Store.LoadTasks()
 	projects := env.Store.LoadProjects()
+	today := env.Today()
 
 	switch args[0] {
 	case "list":
@@ -347,14 +354,21 @@ func cmdTask(env *Env, args []string) error {
 			return nil
 		}
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS")
+		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tDUE")
 		for _, t := range tasks {
 			mark := " "
 			if t.Done {
 				mark = "x"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
-				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel())
+			due := "-"
+			if !t.Due.IsZero() {
+				due = t.Due.String()
+				if t.IsOverdue(today) {
+					due += " (overdue)"
+				}
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
+				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), due)
 		}
 		return w.Flush()
 
@@ -371,17 +385,26 @@ func cmdTask(env *Env, args []string) error {
 			estimate = value
 		}
 		projectID := ""
-		if len(args) >= 4 {
+		if len(args) >= 4 && args[3] != "-" {
 			p, err := projects.Find(args[3])
 			if err != nil {
 				return err
 			}
 			projectID = p.ID
 		}
+		var due core.Date
+		if len(args) >= 5 {
+			parsed, err := core.ParseDate(args[4])
+			if err != nil {
+				return usageErrorf("due date must be YYYY-MM-DD, got %q", args[4])
+			}
+			due = parsed
+		}
 		task, err := tasks.Add(args[1], estimate, projectID)
 		if err != nil {
 			return err
 		}
+		task.Due = due
 		if err := env.Store.SaveTasks(tasks); err != nil {
 			return err
 		}
@@ -686,6 +709,47 @@ func cmdHistory(env *Env, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
 			s.Day(), s.Start.Time().Format("15:04"), s.WorkMinutes,
 			orDash(s.TaskTitle), orDash(s.ProjectName))
+	}
+	return w.Flush()
+}
+
+// --- report ------------------------------------------------------------
+
+func cmdReport(env *Env, args []string) error {
+	days := 7
+	if len(args) >= 1 {
+		value, err := strconv.Atoi(args[0])
+		if err != nil || value < 1 {
+			return usageErrorf("report needs a positive number of days, got %q", args[0])
+		}
+		days = value
+	}
+
+	since := env.Today().AddDays(-(days - 1))
+	totals := env.Store.LoadSessions().Report(since)
+
+	sessionCount, minutes := 0, 0
+	for _, t := range totals {
+		sessionCount += t.Sessions
+		minutes += t.Minutes
+	}
+	noun := "days"
+	if days == 1 {
+		noun = "day"
+	}
+	fmt.Fprintf(env.Out, "Last %d %s: %d pomodoros (%s)\n\n",
+		days, noun, sessionCount, core.FormatMinutes(minutes))
+
+	if len(totals) == 0 {
+		fmt.Fprintln(env.Out, "No sessions in this window.")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "PROJECT\tSESSIONS\tFOCUSED")
+	for _, t := range totals {
+		fmt.Fprintf(w, "%s\t%d\t%s\n", orDash(t.ProjectName), t.Sessions,
+			core.FormatMinutes(t.Minutes))
 	}
 	return w.Flush()
 }

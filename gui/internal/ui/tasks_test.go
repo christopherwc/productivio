@@ -27,6 +27,18 @@ func TestTaskRowText(t *testing.T) {
 		t.Fatalf("tasks.Add() error = %v", err)
 	}
 
+	overdue, err := store.tasks.Add("File taxes", 1, "")
+	if err != nil {
+		t.Fatalf("tasks.Add() error = %v", err)
+	}
+	overdue.Due = core.NewDate(2026, time.August, 1)
+
+	future, err := store.tasks.Add("Renew license", 1, "")
+	if err != nil {
+		t.Fatalf("tasks.Add() error = %v", err)
+	}
+	future.Due = core.NewDate(2026, time.December, 1)
+
 	tests := []struct {
 		name string
 		task *core.Task
@@ -34,10 +46,12 @@ func TestTaskRowText(t *testing.T) {
 	}{
 		{"filed under a project", filed, "Write docs  ·  Ship v1  ·  1/4"},
 		{"unfiled", unfiled, "Buy milk  ·  0/1"},
+		{"overdue", overdue, "File taxes  ·  0/1  ·  due 2026-08-01 (overdue)"},
+		{"due in the future", future, "Renew license  ·  0/1  ·  due 2026-12-01"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := taskRowText(tt.task, store.projects); got != tt.want {
+			if got := taskRowText(tt.task, store.projects, today); got != tt.want {
 				t.Errorf("taskRowText() = %q, want %q", got, tt.want)
 			}
 		})
