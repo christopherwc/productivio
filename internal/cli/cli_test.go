@@ -351,6 +351,60 @@ func TestProjectCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("hold, reopen and rm", func(t *testing.T) {
+		h.run("project", "add", "Temp")
+		tempID := firstID(t, h.stdout())
+
+		if code := h.run("project", "hold", tempID); code != exitOK {
+			t.Fatalf("code = %d: %s", code, h.stderr())
+		}
+		if !strings.Contains(h.stdout(), "on hold") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		project, err := h.env.Store.LoadProjects().Find(tempID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if project.Status != core.StatusOnHold {
+			t.Errorf("status = %q, want %q", project.Status, core.StatusOnHold)
+		}
+
+		if code := h.run("project", "reopen", tempID); code != exitOK {
+			t.Fatalf("code = %d: %s", code, h.stderr())
+		}
+		if !strings.Contains(h.stdout(), "reopened") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		project, err = h.env.Store.LoadProjects().Find(tempID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if project.Status != core.StatusActive {
+			t.Errorf("status = %q, want %q", project.Status, core.StatusActive)
+		}
+
+		h.run("task", "add", "Orphaned", "1", tempID)
+		tasks := h.env.Store.LoadTasks()
+		taskID := tasks[len(tasks)-1].ID
+
+		if code := h.run("project", "rm", tempID); code != exitOK {
+			t.Fatalf("code = %d: %s", code, h.stderr())
+		}
+		if !strings.Contains(h.stdout(), "Deleted") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		if _, err := h.env.Store.LoadProjects().Find(tempID); err == nil {
+			t.Error("the project should be gone")
+		}
+		task, err := h.env.Store.LoadTasks().Find(taskID)
+		if err != nil {
+			t.Fatal("the task should survive the project's deletion")
+		}
+		if task.ProjectID != "" {
+			t.Errorf("ProjectID = %q, want unfiled", task.ProjectID)
+		}
+	})
+
 	t.Run("subprojects", func(t *testing.T) {
 		h.run("project", "add", "Parent")
 		parentID := firstID(t, h.stdout())
@@ -457,6 +511,12 @@ func TestProjectCommands(t *testing.T) {
 			{"project", "parent", projectID, "no-such-project"},
 			{"project", "done"},
 			{"project", "done", "no-such-project"},
+			{"project", "hold"},
+			{"project", "hold", "no-such-project"},
+			{"project", "reopen"},
+			{"project", "reopen", "no-such-project"},
+			{"project", "rm"},
+			{"project", "rm", "no-such-project"},
 		}
 		for _, args := range cases {
 			t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -850,6 +910,9 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
 		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
 		"project done":   func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
+		"project hold":   func(i map[string]string) []string { return []string{"project", "hold", i["project"]} },
+		"project reopen": func(i map[string]string) []string { return []string{"project", "reopen", i["project"]} },
+		"project rm":     func(i map[string]string) []string { return []string{"project", "rm", i["project"]} },
 		"habit add":      func(map[string]string) []string { return []string{"habit", "add", "New"} },
 		"habit check":    func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
 		"start":          func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },

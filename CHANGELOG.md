@@ -95,6 +95,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lookup, so a report still totals correctly under a project's old
   name even after it has since been renamed or deleted — the same
   reason `Session` already stored that name instead of only the id.
+- **Project hold/reopen/rm.** `Project.Hold`/`Reopen` and
+  `Projects.Delete` existed and were fully tested from the start, but
+  had no command or GUI control — `project list`'s doc comment even
+  noted the gap. `pomodoro project hold <id>`, `project reopen <id>`
+  and `project rm <id>` (plus matching Hold/Reopen/✕ buttons on the
+  GUI projects view) now expose them: pausing/reactivating a project,
+  and deleting one without losing its tasks (unfiled, not deleted) or
+  orphaning its subprojects (promoted up one level, as `Delete` already
+  guaranteed).
 
 ### Fixed
 

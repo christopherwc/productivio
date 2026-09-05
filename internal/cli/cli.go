@@ -84,6 +84,9 @@ Usage:
   pomodoro project add <name> [due|-] [parent]  Add a project, optionally under parent
   pomodoro project parent <id> <parent|->  File under parent, or - to clear
   pomodoro project done <id>          Mark a project complete
+  pomodoro project hold <id>          Pause a project
+  pomodoro project reopen <id>        Reactivate a completed or held project
+  pomodoro project rm <id>            Delete a project (tasks unfiled, subprojects promoted)
   pomodoro habit list                 List habits with streaks
   pomodoro habit add <name> [sched]   Add a habit (daily|weekdays|weekends)
   pomodoro habit check <id>           Toggle today's completion
@@ -453,7 +456,7 @@ func cmdTask(env *Env, args []string) error {
 
 func cmdProject(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("project needs a subcommand: list, add, parent or done")
+		return usageErrorf("project needs a subcommand: list, add, parent, done, hold, reopen or rm")
 	}
 	projects := env.Store.LoadProjects()
 	tasks := env.Store.LoadTasks()
@@ -576,6 +579,55 @@ func cmdProject(env *Env, args []string) error {
 			return err
 		}
 		fmt.Fprintf(env.Out, "%s completed\n", project.Name)
+		return nil
+
+	case "hold":
+		if len(args) < 2 {
+			return usageErrorf("project hold needs a project id")
+		}
+		project, err := projects.Find(args[1])
+		if err != nil {
+			return err
+		}
+		project.Hold()
+		if err := env.Store.SaveProjects(projects); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s on hold\n", project.Name)
+		return nil
+
+	case "reopen":
+		if len(args) < 2 {
+			return usageErrorf("project reopen needs a project id")
+		}
+		project, err := projects.Find(args[1])
+		if err != nil {
+			return err
+		}
+		project.Reopen()
+		if err := env.Store.SaveProjects(projects); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s reopened\n", project.Name)
+		return nil
+
+	case "rm":
+		if len(args) < 2 {
+			return usageErrorf("project rm needs a project id")
+		}
+		if !projects.Delete(args[1]) {
+			return fmt.Errorf("project %q: %w", args[1], core.ErrNotFound)
+		}
+		// Its tasks are not deleted, only unfiled; see
+		// Tasks.DetachFromProject and Projects.Delete.
+		tasks.DetachFromProject(args[1])
+		if err := env.Store.SaveProjects(projects); err != nil {
+			return err
+		}
+		if err := env.Store.SaveTasks(tasks); err != nil {
+			return err
+		}
+		fmt.Fprintln(env.Out, "Deleted.")
 		return nil
 
 	default:
