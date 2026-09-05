@@ -52,8 +52,9 @@ func newTaskRow() fyne.CanvasObject {
 	)
 }
 
-// NewTasksTab builds the task list view: add, complete, reorder and
-// delete tasks, each optionally filed under a project.
+// NewTasksTab builds the task list view: add, complete, reorder,
+// delete and bulk-clear-completed tasks, each optionally filed under a
+// project.
 //
 // Fyne has no built-in drag-to-reorder or swipe-to-delete outside its
 // mobile build, so reordering is explicit up/down buttons and deletion
@@ -170,5 +171,10 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		addButton)
 	addForm := container.NewBorder(nil, nil, nil, trailing, titleEntry)
 
-	return container.NewBorder(addForm, nil, nil, nil, list)
+	clearButton := widget.NewButton("Clear done", func() {
+		tasks.ClearCompleted()
+		save()
+	})
+
+	return container.NewBorder(addForm, clearButton, nil, nil, list)
 }
