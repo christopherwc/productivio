@@ -274,6 +274,37 @@ func TestTaskCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("clear removes only completed tasks", func(t *testing.T) {
+		tasks := h.env.Store.LoadTasks()
+		before := len(tasks)
+		h.run("task", "done", tasks[0].ID) // mark one done so clear has work to do
+
+		h.run("task", "clear")
+		if !strings.Contains(h.stdout(), "Cleared 1 completed task(s).") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		remaining := h.env.Store.LoadTasks()
+		if len(remaining) != before-1 {
+			t.Errorf("tasks = %d, want %d", len(remaining), before-1)
+		}
+		for _, task := range remaining {
+			if task.Done {
+				t.Errorf("a done task survived clear: %+v", task)
+			}
+		}
+	})
+
+	t.Run("clear on an all-open list removes nothing", func(t *testing.T) {
+		before := len(h.env.Store.LoadTasks())
+		h.run("task", "clear")
+		if !strings.Contains(h.stdout(), "Cleared 0 completed task(s).") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		if got := len(h.env.Store.LoadTasks()); got != before {
+			t.Errorf("tasks = %d, want unchanged %d", got, before)
+		}
+	})
+
 	t.Run("argument errors", func(t *testing.T) {
 		cases := [][]string{
 			{"task"},
@@ -907,6 +938,7 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"task add":       func(map[string]string) []string { return []string{"task", "add", "New"} },
 		"task done":      func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
 		"task rm":        func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
+		"task clear":     func(map[string]string) []string { return []string{"task", "clear"} },
 		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
 		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
 		"project done":   func(i map[string]string) []string { return []string{"project", "done", i["project"]} },

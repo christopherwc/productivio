@@ -80,6 +80,7 @@ Usage:
   pomodoro task add <title> [n] [proj|-] [due]  Add a task, optionally due YYYY-MM-DD
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
+  pomodoro task clear                 Delete every completed task
   pomodoro project list               List projects, subprojects indented
   pomodoro project add <name> [due|-] [parent]  Add a project, optionally under parent
   pomodoro project parent <id> <parent|->  File under parent, or - to clear
@@ -344,7 +345,7 @@ func intArg(args []string, i int) (int, error) {
 
 func cmdTask(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("task needs a subcommand: list, add, done or rm")
+		return usageErrorf("task needs a subcommand: list, add, done, rm or clear")
 	}
 	tasks := env.Store.LoadTasks()
 	projects := env.Store.LoadProjects()
@@ -445,6 +446,14 @@ func cmdTask(env *Env, args []string) error {
 			return err
 		}
 		fmt.Fprintln(env.Out, "Deleted.")
+		return nil
+
+	case "clear":
+		removed := tasks.ClearCompleted()
+		if err := env.Store.SaveTasks(tasks); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "Cleared %d completed task(s).\n", removed)
 		return nil
 
 	default:
