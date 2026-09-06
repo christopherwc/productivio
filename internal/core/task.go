@@ -108,6 +108,45 @@ type Task struct {
 	ProjectID   string    `json:"project_id"` // owning project, or empty
 	Due         Date      `json:"due"`        // deadline, or the zero Date for none
 	Priority    Priority  `json:"priority"`   // urgency, or PriorityNone for unset
+	Tags        []string  `json:"tags"`       // freeform labels, never nil
+}
+
+// ParseTags splits a comma-separated list into cleaned tags. "" and
+// "-" (the CLI's placeholder for "skip this field") both mean no tags.
+func ParseTags(s string) []string {
+	if s == "" || s == "-" {
+		return nil
+	}
+	return cleanTags(strings.Split(s, ","))
+}
+
+// cleanTags trims each tag, drops empties, and deduplicates
+// case-insensitively while keeping the first casing seen.
+func cleanTags(tags []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, tag)
+	}
+	return out
+}
+
+// FormatTags renders tags as a comma-separated list for display, or a
+// dash when there are none.
+func FormatTags(tags []string) string {
+	if len(tags) == 0 {
+		return "-"
+	}
+	return strings.Join(tags, ",")
 }
 
 // Tasks is the ordered task list.
@@ -129,6 +168,7 @@ func NewTask(title string, estimate int, projectID string) (*Task, error) {
 		Estimate:  estimate,
 		Created:   Timestamp(time.Now()),
 		ProjectID: projectID,
+		Tags:      []string{},
 	}, nil
 }
 
@@ -149,6 +189,10 @@ func (t *Task) normalize() {
 	}
 	if t.Created.Time().IsZero() {
 		t.Created = Timestamp(time.Now())
+	}
+	t.Tags = cleanTags(t.Tags)
+	if t.Tags == nil {
+		t.Tags = []string{}
 	}
 }
 
@@ -196,6 +240,18 @@ func (t *Task) SetDone(done bool) {
 	} else {
 		t.CompletedAt = nil
 	}
+}
+
+// HasTag reports whether the task carries a tag, compared
+// case-insensitively so "Urgent" and "urgent" are the same tag.
+func (t *Task) HasTag(tag string) bool {
+	target := strings.ToLower(strings.TrimSpace(tag))
+	for _, tg := range t.Tags {
+		if strings.ToLower(tg) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // Find returns the task with the given id.
@@ -287,6 +343,17 @@ func (ts Tasks) WithPriority(p Priority) Tasks {
 	var out Tasks
 	for _, t := range ts {
 		if t.Priority == p {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// WithTag returns the tasks carrying a tag, in list order.
+func (ts Tasks) WithTag(tag string) Tasks {
+	var out Tasks
+	for _, t := range ts {
+		if t.HasTag(tag) {
 			out = append(out, t)
 		}
 	}

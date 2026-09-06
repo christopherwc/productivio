@@ -507,6 +507,115 @@ func TestTaskDeadlines(t *testing.T) {
 	})
 }
 
+func TestTaskTags(t *testing.T) {
+	t.Run("ParseTags trims, drops empties, and dedupes case-insensitively", func(t *testing.T) {
+		got := ParseTags("Urgent, home , ,urgent,Errand")
+		want := []string{"Urgent", "home", "Errand"}
+		if !equalStrings(got, want) {
+			t.Errorf("ParseTags = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("ParseTags treats empty and dash as no tags", func(t *testing.T) {
+		for _, s := range []string{"", "-"} {
+			if got := ParseTags(s); got != nil {
+				t.Errorf("ParseTags(%q) = %v, want nil", s, got)
+			}
+		}
+	})
+
+	t.Run("FormatTags joins with commas, or dashes when empty", func(t *testing.T) {
+		if got := FormatTags([]string{"a", "b"}); got != "a,b" {
+			t.Errorf("FormatTags = %q, want a,b", got)
+		}
+		if got := FormatTags(nil); got != "-" {
+			t.Errorf("FormatTags(nil) = %q, want -", got)
+		}
+	})
+
+	t.Run("HasTag compares case-insensitively", func(t *testing.T) {
+		task := mustTask(t, "T", 1, "")
+		task.Tags = []string{"Urgent", "home"}
+		if !task.HasTag("urgent") || !task.HasTag("URGENT") {
+			t.Error("HasTag should ignore case")
+		}
+		if task.HasTag("errand") {
+			t.Error("HasTag should not match an absent tag")
+		}
+	})
+
+	t.Run("WithTag filters to tasks carrying a tag", func(t *testing.T) {
+		var tasks Tasks
+		a, _ := tasks.Add("A", 1, "")
+		b, _ := tasks.Add("B", 1, "")
+		c, _ := tasks.Add("C", 1, "")
+		a.Tags = []string{"urgent"}
+		b.Tags = []string{"Urgent", "home"}
+		c.Tags = []string{"home"}
+
+		if got := titles(tasks.WithTag("urgent")); !equalStrings(got, []string{"A", "B"}) {
+			t.Errorf("urgent = %v", got)
+		}
+		if got := titles(tasks.WithTag("home")); !equalStrings(got, []string{"B", "C"}) {
+			t.Errorf("home = %v", got)
+		}
+		if got := tasks.WithTag("nope"); len(got) != 0 {
+			t.Errorf("nope = %v, want none", got)
+		}
+	})
+
+	t.Run("a new task starts with an empty, non-nil tag list", func(t *testing.T) {
+		task := mustTask(t, "T", 1, "")
+		if task.Tags == nil || len(task.Tags) != 0 {
+			t.Errorf("Tags = %v, want an empty non-nil slice", task.Tags)
+		}
+	})
+
+	t.Run("round-trips through JSON as a plain array", func(t *testing.T) {
+		task := mustTask(t, "T", 1, "")
+		task.Tags = []string{"Urgent", "home"}
+		var tasks Tasks = Tasks{task}
+
+		store := newTestStore(t)
+		if err := store.SaveTasks(tasks); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := store.LoadTasks()
+		if len(reloaded) != 1 || !equalStrings(reloaded[0].Tags, []string{"Urgent", "home"}) {
+			t.Errorf("reloaded tags = %+v, want [Urgent home]", reloaded)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(store.Dir(), "tasks.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `"tags": [`) {
+			t.Errorf("file should store tags as a plain array, got:\n%s", raw)
+		}
+	})
+
+	t.Run("normalize cleans tags read from a hand-edited file and never leaves nil", func(t *testing.T) {
+		store := newTestStore(t)
+		raw := `[{"id":"t1","title":"T","estimate":1,"tags":["Urgent"," ","urgent","",null]}]`
+		if err := os.WriteFile(filepath.Join(store.Dir(), "tasks.json"), []byte(raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tasks := store.LoadTasks()
+		if len(tasks) != 1 {
+			t.Fatalf("loaded %d tasks, want 1", len(tasks))
+		}
+		if !equalStrings(tasks[0].Tags, []string{"Urgent"}) {
+			t.Errorf("Tags = %v, want [Urgent]", tasks[0].Tags)
+		}
+
+		empty := &Task{ID: "t2", Title: "Empty"}
+		empty.normalize()
+		if empty.Tags == nil || len(empty.Tags) != 0 {
+			t.Errorf("Tags = %v, want an empty non-nil slice", empty.Tags)
+		}
+	})
+}
+
 func TestTaskPriority(t *testing.T) {
 	t.Run("ParsePriority accepts every level, case-insensitively, and rejects garbage", func(t *testing.T) {
 		cases := map[string]Priority{

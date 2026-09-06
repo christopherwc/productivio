@@ -92,8 +92,11 @@ pomodoro task add "Write docs" 4 <project-id>
 pomodoro task add "File taxes" 1 - 2026-10-15   # due date, no project
 pomodoro task add "Ship it" 1 - - high   # priority, no due date
 pomodoro task priority <task-id> low     # low, medium or high
+pomodoro task add "Call plumber" 1 - - - "urgent,home"   # tags, no priority
+pomodoro task tag <task-id> errand,phone # replace a task's tags, or - to clear
 pomodoro task list                       # highest priority first, DUE flagged once overdue
 pomodoro task list high                  # only high-priority tasks
+pomodoro task list -tag home             # only tasks tagged "home"
 pomodoro task clear                      # delete every completed task
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
@@ -129,6 +132,12 @@ A task can also carry a priority (low, medium or high, or none by
 default). `task list` sorts highest priority first, ties keeping their
 original order, and an optional argument filters the list down to one
 level.
+
+A task can also carry freeform tags — a comma-separated list set via
+`task add`'s last argument or replaced wholesale with `task tag <id>
+<tags|->` (`-` clears them). Tags are compared case-insensitively and
+deduplicated, and `task list -tag <tag>` filters the list down to tasks
+carrying one.
 
 `report` breaks focused time down by project over a trailing window
 (7 days by default), sorted by minutes so the projects worked on most

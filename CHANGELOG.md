@@ -129,6 +129,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same way the existing GUI Report tab is: a plain row-text
   function tested directly, plus a regression test that the tab builds
   with a real session logged.
+- **Task tags.** A task can carry freeform tags — `pomodoro task add
+  <title> [n] [proj|-] [due|-] [priority|-] [tags]`, or `pomodoro task
+  tag <id> <tags|->` to replace them later (`-` clears). Tags are
+  trimmed, deduplicated case-insensitively (keeping the first casing
+  seen), and always stored as a plain JSON array rather than `null`,
+  matching the rest of the model's hand-editable format. `task list
+  -tag <tag>` filters the list to tasks carrying it.
 
 ### Fixed
 
