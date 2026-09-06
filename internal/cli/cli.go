@@ -76,9 +76,10 @@ const usage = `pomodoro — a focus timer with tasks, habits and projects
 Usage:
   pomodoro status                     Today's summary
   pomodoro start [flags]              Run a work interval
-  pomodoro task list [priority]         List tasks, highest priority first
-  pomodoro task add <title> [n] [proj|-] [due|-] [priority]  Add a task
+  pomodoro task list [priority|-tag TAG]  List tasks, highest priority first
+  pomodoro task add <title> [n] [proj|-] [due|-] [priority|-] [tags]  Add a task
   pomodoro task priority <id> <level>  Set priority: low, medium or high
+  pomodoro task tag <id> <tags|->     Set comma-separated tags, or - to clear
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
   pomodoro task clear                 Delete every completed task
@@ -347,7 +348,7 @@ func intArg(args []string, i int) (int, error) {
 
 func cmdTask(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("task needs a subcommand: list, add, priority, done, rm or clear")
+		return usageErrorf("task needs a subcommand: list, add, priority, tag, done, rm or clear")
 	}
 	tasks := env.Store.LoadTasks()
 	projects := env.Store.LoadProjects()
@@ -355,29 +356,45 @@ func cmdTask(env *Env, args []string) error {
 
 	switch args[0] {
 	case "list":
-		filter := core.PriorityNone
-		filtered := false
-		if len(args) >= 2 {
+		priorityFilter := core.PriorityNone
+		byPriority := false
+		tagFilter := ""
+		byTag := false
+
+		switch {
+		case len(args) >= 2 && (args[1] == "-tag" || args[1] == "--tag"):
+			if len(args) < 3 || args[2] == "" {
+				return usageErrorf("-tag needs a value")
+			}
+			tagFilter, byTag = args[2], true
+		case len(args) >= 2:
 			parsed, err := core.ParsePriority(args[1])
 			if err != nil {
 				return usageErrorf("%s", err)
 			}
-			filter, filtered = parsed, true
+			priorityFilter, byPriority = parsed, true
 		}
+
 		shown := tasks.ByPriority()
-		if filtered {
-			shown = shown.WithPriority(filter)
+		switch {
+		case byTag:
+			shown = shown.WithTag(tagFilter)
+		case byPriority:
+			shown = shown.WithPriority(priorityFilter)
 		}
 		if len(shown) == 0 {
-			if filtered {
+			switch {
+			case byTag:
+				fmt.Fprintln(env.Out, "No tasks with that tag.")
+			case byPriority:
 				fmt.Fprintln(env.Out, "No tasks at that priority.")
-			} else {
+			default:
 				fmt.Fprintln(env.Out, "No tasks yet.")
 			}
 			return nil
 		}
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tPRIORITY\tDUE")
+		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tPRIORITY\tDUE\tTAGS")
 		for _, t := range shown {
 			mark := " "
 			if t.Done {
@@ -390,8 +407,9 @@ func cmdTask(env *Env, args []string) error {
 					due += " (overdue)"
 				}
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
-				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), t.Priority, due)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
+				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), t.Priority, due,
+				core.FormatTags(t.Tags))
 		}
 		return w.Flush()
 
@@ -431,12 +449,20 @@ func cmdTask(env *Env, args []string) error {
 			}
 			priority = parsed
 		}
+		tags := []string{}
+		if len(args) >= 7 {
+			tags = core.ParseTags(args[6])
+			if tags == nil {
+				tags = []string{}
+			}
+		}
 		task, err := tasks.Add(args[1], estimate, projectID)
 		if err != nil {
 			return err
 		}
 		task.Due = due
 		task.Priority = priority
+		task.Tags = tags
 		if err := env.Store.SaveTasks(tasks); err != nil {
 			return err
 		}
@@ -461,6 +487,25 @@ func cmdTask(env *Env, args []string) error {
 			return err
 		}
 		fmt.Fprintf(env.Out, "%s priority: %s\n", task.Title, task.Priority)
+		return nil
+
+	case "tag":
+		if len(args) < 3 {
+			return usageErrorf("task tag needs a task id and a comma-separated list of tags (or - to clear)")
+		}
+		task, err := tasks.Find(args[1])
+		if err != nil {
+			return err
+		}
+		tags := core.ParseTags(args[2])
+		if tags == nil {
+			tags = []string{}
+		}
+		task.Tags = tags
+		if err := env.Store.SaveTasks(tasks); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s tags: %s\n", task.Title, core.FormatTags(task.Tags))
 		return nil
 
 	case "done":
