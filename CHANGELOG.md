@@ -116,6 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their original order) and takes an optional level to filter down to
   just that priority. Stored by name (`"priority": "high"`) rather than
   as a number, matching the rest of the model's hand-editable JSON.
+- **GUI history view.** A new History tab lists recent sessions newest
+  first — the same log `pomodoro history` prints — over a count the
+  field above the list controls (default 10, matching the CLI). Built
+  the same way the existing GUI Report tab is: a plain row-text
+  function tested directly, plus a regression test that the tab builds
+  with a real session logged.
 
 ### Fixed
 
