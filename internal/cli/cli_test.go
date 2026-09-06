@@ -325,6 +325,87 @@ func TestTaskCommands(t *testing.T) {
 		h.run("task", "rm", highID)
 	})
 
+	t.Run("tags", func(t *testing.T) {
+		h.run("task", "add", "Errand", "1", "-", "-", "-", "urgent, home")
+		errandID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+		h.run("task", "add", "Chore", "1", "-", "-", "-", "home")
+		choreID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+
+		t.Run("add sets cleaned tags", func(t *testing.T) {
+			task, _ := h.env.Store.LoadTasks().Find(errandID)
+			if !strings.Contains(core.FormatTags(task.Tags), "urgent") ||
+				!strings.Contains(core.FormatTags(task.Tags), "home") {
+				t.Errorf("Tags = %v", task.Tags)
+			}
+		})
+
+		t.Run("add defaults to no tags", func(t *testing.T) {
+			h.run("task", "add", "No tags")
+			tasks := h.env.Store.LoadTasks()
+			last := tasks[len(tasks)-1]
+			if len(last.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", last.Tags)
+			}
+		})
+
+		t.Run("add treats an explicit - as no tags", func(t *testing.T) {
+			h.run("task", "add", "Dash tags", "1", "-", "-", "-", "-")
+			tasks := h.env.Store.LoadTasks()
+			last := tasks[len(tasks)-1]
+			if len(last.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", last.Tags)
+			}
+		})
+
+		t.Run("the tag subcommand replaces the tag list", func(t *testing.T) {
+			if code := h.run("task", "tag", choreID, "urgent"); code != exitOK {
+				t.Fatalf("exit code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "Chore tags: urgent") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			task, _ := h.env.Store.LoadTasks().Find(choreID)
+			if !task.HasTag("urgent") || task.HasTag("home") {
+				t.Errorf("Tags = %v, want just urgent", task.Tags)
+			}
+			h.run("task", "tag", choreID, "home") // put it back
+		})
+
+		t.Run("the tag subcommand clears tags with -", func(t *testing.T) {
+			h.run("task", "tag", errandID, "-")
+			task, _ := h.env.Store.LoadTasks().Find(errandID)
+			if len(task.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", task.Tags)
+			}
+			h.run("task", "tag", errandID, "urgent, home") // put it back
+		})
+
+		t.Run("list shows the tags column", func(t *testing.T) {
+			h.run("task", "list")
+			if !strings.Contains(h.stdout(), "urgent") {
+				t.Errorf("output should show tags:\n%s", h.stdout())
+			}
+		})
+
+		t.Run("list -tag filters to tasks carrying a tag", func(t *testing.T) {
+			h.run("task", "list", "-tag", "urgent")
+			out := h.stdout()
+			if !strings.Contains(out, "Errand") || strings.Contains(out, "Chore") {
+				t.Errorf("output should contain only the urgent task:\n%s", out)
+			}
+		})
+
+		t.Run("list -tag reports when nothing matches", func(t *testing.T) {
+			h.run("task", "list", "-tag", "nope")
+			if !strings.Contains(h.stdout(), "No tasks with that tag.") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+
+		h.run("task", "rm", errandID)
+		h.run("task", "rm", choreID)
+	})
+
 	t.Run("done toggles both ways", func(t *testing.T) {
 		taskID := h.env.Store.LoadTasks()[0].ID
 		h.run("task", "done", taskID)
@@ -394,9 +475,13 @@ func TestTaskCommands(t *testing.T) {
 			{"task", "add", "T", "1", "-", "not-a-date"},
 			{"task", "add", "T", "1", "-", "-", "urgent"},
 			{"task", "list", "urgent"},
+			{"task", "list", "-tag"},
 			{"task", "priority"},
 			{"task", "priority", "no-such-task", "high"},
 			{"task", "priority", "no-such-task"},
+			{"task", "tag"},
+			{"task", "tag", "no-such-task", "urgent"},
+			{"task", "tag", "no-such-task"},
 			{"task", "done"},
 			{"task", "done", "no-such-task"},
 			{"task", "rm"},
@@ -1092,6 +1177,7 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"task done":      func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
 		"task rm":        func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
 		"task priority":  func(i map[string]string) []string { return []string{"task", "priority", i["task"], "high"} },
+		"task tag":       func(i map[string]string) []string { return []string{"task", "tag", i["task"], "urgent"} },
 		"task clear":     func(map[string]string) []string { return []string{"task", "clear"} },
 		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
 		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
