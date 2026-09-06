@@ -507,6 +507,114 @@ func TestTaskDeadlines(t *testing.T) {
 	})
 }
 
+func TestTaskPriority(t *testing.T) {
+	t.Run("ParsePriority accepts every level, case-insensitively, and rejects garbage", func(t *testing.T) {
+		cases := map[string]Priority{
+			"":       PriorityNone,
+			"-":      PriorityNone,
+			"none":   PriorityNone,
+			"low":    PriorityLow,
+			"LOW":    PriorityLow,
+			"medium": PriorityMedium,
+			"med":    PriorityMedium,
+			"high":   PriorityHigh,
+			"HIGH":   PriorityHigh,
+		}
+		for input, want := range cases {
+			got, err := ParsePriority(input)
+			if err != nil || got != want {
+				t.Errorf("ParsePriority(%q) = %v, %v; want %v, nil", input, got, err, want)
+			}
+		}
+		if _, err := ParsePriority("urgent"); err == nil {
+			t.Error("ParsePriority(\"urgent\") should fail")
+		}
+	})
+
+	t.Run("String renders each level and a dash for none", func(t *testing.T) {
+		cases := map[Priority]string{
+			PriorityNone: "-", PriorityLow: "low", PriorityMedium: "medium", PriorityHigh: "high",
+		}
+		for p, want := range cases {
+			if got := p.String(); got != want {
+				t.Errorf("%v.String() = %q, want %q", p, got, want)
+			}
+		}
+	})
+
+	t.Run("round-trips through JSON by name", func(t *testing.T) {
+		task := mustTask(t, "T", 1, "")
+		task.Priority = PriorityHigh
+		var tasks Tasks = Tasks{task}
+
+		store := newTestStore(t)
+		if err := store.SaveTasks(tasks); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := store.LoadTasks()
+		if len(reloaded) != 1 || reloaded[0].Priority != PriorityHigh {
+			t.Errorf("reloaded priority = %+v, want high", reloaded)
+		}
+
+		raw, err := os.ReadFile(filepath.Join(store.Dir(), "tasks.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `"priority": "high"`) {
+			t.Errorf("file should store the priority by name, got:\n%s", raw)
+		}
+	})
+
+	t.Run("an unrecognized stored value degrades to none rather than failing to load", func(t *testing.T) {
+		store := newTestStore(t)
+		raw := `[{"id":"t1","title":"T","estimate":1,"priority":"urgent"}]`
+		if err := os.WriteFile(filepath.Join(store.Dir(), "tasks.json"), []byte(raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tasks := store.LoadTasks()
+		if len(tasks) != 1 || tasks[0].Priority != PriorityNone {
+			t.Errorf("tasks = %+v, want priority none", tasks)
+		}
+	})
+
+	t.Run("WithPriority filters to exactly one level", func(t *testing.T) {
+		var tasks Tasks
+		a, _ := tasks.Add("A", 1, "")
+		b, _ := tasks.Add("B", 1, "")
+		c, _ := tasks.Add("C", 1, "")
+		a.Priority = PriorityHigh
+		b.Priority = PriorityLow
+		c.Priority = PriorityHigh
+
+		if got := titles(tasks.WithPriority(PriorityHigh)); !equalStrings(got, []string{"A", "C"}) {
+			t.Errorf("high = %v", got)
+		}
+		if got := titles(tasks.WithPriority(PriorityLow)); !equalStrings(got, []string{"B"}) {
+			t.Errorf("low = %v", got)
+		}
+		if got := tasks.WithPriority(PriorityMedium); len(got) != 0 {
+			t.Errorf("medium = %v, want none", got)
+		}
+	})
+
+	t.Run("ByPriority sorts highest first and keeps ties in list order", func(t *testing.T) {
+		var tasks Tasks
+		_, _ = tasks.Add("A", 1, "")  // none
+		b, _ := tasks.Add("B", 1, "") // high
+		c, _ := tasks.Add("C", 1, "") // low
+		d, _ := tasks.Add("D", 1, "") // high
+		b.Priority, c.Priority, d.Priority = PriorityHigh, PriorityLow, PriorityHigh
+
+		if got := titles(tasks.ByPriority()); !equalStrings(got, []string{"B", "D", "C", "A"}) {
+			t.Errorf("order = %v", got)
+		}
+		// The original list is untouched.
+		if got := titles(tasks); !equalStrings(got, []string{"A", "B", "C", "D"}) {
+			t.Errorf("original order changed: %v", got)
+		}
+	})
+}
+
 func TestTaskOperations(t *testing.T) {
 	newList := func(t *testing.T) (Tasks, *Task, *Task, *Task) {
 		t.Helper()

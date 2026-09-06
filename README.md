@@ -90,7 +90,10 @@ pomodoro project hold <id>               # pause it; reopen brings it back
 pomodoro project rm <id>                 # delete it (tasks unfiled, subprojects promoted)
 pomodoro task add "Write docs" 4 <project-id>
 pomodoro task add "File taxes" 1 - 2026-10-15   # due date, no project
-pomodoro task list                       # DUE column, flagged once overdue
+pomodoro task add "Ship it" 1 - - high   # priority, no due date
+pomodoro task priority <task-id> low     # low, medium or high
+pomodoro task list                       # highest priority first, DUE flagged once overdue
+pomodoro task list high                  # only high-priority tasks
 pomodoro task clear                      # delete every completed task
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
@@ -119,6 +122,11 @@ useful since a project's deadline says when the whole thing is due, not
 when each piece of it needs to happen. `status` and `task list` flag an
 open task whose date has passed; a done task is never flagged, however
 late it finished.
+
+A task can also carry a priority (low, medium or high, or none by
+default). `task list` sorts highest priority first, ties keeping their
+original order, and an optional argument filters the list down to one
+level.
 
 `report` breaks focused time down by project over a trailing window
 (7 days by default), sorted by minutes so the projects worked on most
