@@ -1,8 +1,11 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -17,6 +20,82 @@ var ErrEmptyName = errors.New("core: name cannot be empty")
 // lint check, whereas a silently discarded None did not.
 var ErrNotFound = errors.New("core: not found")
 
+// Priority is how urgently a task needs attention. The zero value,
+// PriorityNone, sorts and displays as "no priority set" rather than
+// "lowest", so an unprioritized task is never confused with one
+// deliberately marked low.
+type Priority int
+
+const (
+	PriorityNone Priority = iota
+	PriorityLow
+	PriorityMedium
+	PriorityHigh
+)
+
+// ParsePriority reads a priority level by name, case-insensitively.
+// "-" and "" both mean PriorityNone, matching the "-" placeholder the
+// CLI already uses elsewhere to skip an optional field.
+func ParsePriority(s string) (Priority, error) {
+	switch strings.ToLower(s) {
+	case "", "-", "none":
+		return PriorityNone, nil
+	case "low":
+		return PriorityLow, nil
+	case "medium", "med":
+		return PriorityMedium, nil
+	case "high":
+		return PriorityHigh, nil
+	default:
+		return PriorityNone, fmt.Errorf("core: priority must be low, medium or high, got %q", s)
+	}
+}
+
+// String renders the priority the way the CLI displays it.
+func (p Priority) String() string {
+	switch p {
+	case PriorityLow:
+		return "low"
+	case PriorityMedium:
+		return "medium"
+	case PriorityHigh:
+		return "high"
+	default:
+		return "-"
+	}
+}
+
+// name is the priority's persisted and parsed form ("" for none, so an
+// old task file without a priority field still decodes cleanly).
+func (p Priority) name() string {
+	if p == PriorityNone {
+		return ""
+	}
+	return p.String()
+}
+
+// MarshalJSON renders the priority by name, so the data file stays
+// hand-editable like the rest of the model.
+func (p Priority) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.name())
+}
+
+// UnmarshalJSON accepts a priority name. An unrecognized value decodes
+// to PriorityNone rather than erroring, so a hand-edited or
+// hand-written file degrades to "unset" instead of failing to load.
+func (p *Priority) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	parsed, err := ParsePriority(s)
+	if err != nil {
+		parsed = PriorityNone
+	}
+	*p = parsed
+	return nil
+}
+
 // Task is one item on the TODO list.
 type Task struct {
 	ID          string    `json:"id"`
@@ -28,6 +107,7 @@ type Task struct {
 	CompletedAt *string   `json:"completed_at"`
 	ProjectID   string    `json:"project_id"` // owning project, or empty
 	Due         Date      `json:"due"`        // deadline, or the zero Date for none
+	Priority    Priority  `json:"priority"`   // urgency, or PriorityNone for unset
 }
 
 // Tasks is the ordered task list.
@@ -200,6 +280,28 @@ func (ts Tasks) ForProject(projectID string) Tasks {
 
 // Unfiled returns the tasks not belonging to any project.
 func (ts Tasks) Unfiled() Tasks { return ts.ForProject("") }
+
+// WithPriority returns the tasks at exactly the given priority level,
+// in list order.
+func (ts Tasks) WithPriority(p Priority) Tasks {
+	var out Tasks
+	for _, t := range ts {
+		if t.Priority == p {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// ByPriority returns a copy of the tasks ordered highest priority
+// first. Equal priorities keep their relative list order, so `task
+// list` stays predictable rather than shuffling tasks that tie.
+func (ts Tasks) ByPriority() Tasks {
+	out := make(Tasks, len(ts))
+	copy(out, ts)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority > out[j].Priority })
+	return out
+}
 
 // DetachFromProject unfiles every task belonging to a project, and
 // reports how many moved.
