@@ -93,6 +93,7 @@ Usage:
   pomodoro habit check <id>           Toggle today's completion
   pomodoro history [n]                Show the last n sessions (default 10)
   pomodoro report [n]                  Focus time by project, last n days (default 7)
+  pomodoro report habits [n]           Streak report; completion rate over last n days (default 30)
   pomodoro where                      Print the data directory
   pomodoro version                    Print version information
 
@@ -777,6 +778,10 @@ func cmdHistory(env *Env, args []string) error {
 // --- report ------------------------------------------------------------
 
 func cmdReport(env *Env, args []string) error {
+	if len(args) >= 1 && args[0] == "habits" {
+		return cmdReportHabits(env, args[1:])
+	}
+
 	days := 7
 	if len(args) >= 1 {
 		value, err := strconv.Atoi(args[0])
@@ -811,6 +816,37 @@ func cmdReport(env *Env, args []string) error {
 	for _, t := range totals {
 		fmt.Fprintf(w, "%s\t%d\t%s\n", orDash(t.ProjectName), t.Sessions,
 			core.FormatMinutes(t.Minutes))
+	}
+	return w.Flush()
+}
+
+// cmdReportHabits prints current and longest streaks per habit,
+// alongside their completion rate over a trailing window — the same
+// figures `habit list` shows individually, but ranked so the habits
+// most and least in need of attention are easy to spot at a glance.
+func cmdReportHabits(env *Env, args []string) error {
+	days := 30
+	if len(args) >= 1 {
+		value, err := strconv.Atoi(args[0])
+		if err != nil || value < 1 {
+			return usageErrorf("report habits needs a positive number of days, got %q", args[0])
+		}
+		days = value
+	}
+
+	habits := env.Store.LoadHabits()
+	if len(habits) == 0 {
+		fmt.Fprintln(env.Out, "No habits yet.")
+		return nil
+	}
+
+	today := env.Today()
+	w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "HABIT\tSCHEDULE\tCURRENT\tLONGEST\t%dD RATE\n", days)
+	for _, h := range habits.ByCurrentStreak(today) {
+		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\n", h.Name, h.ScheduleLabel(),
+			h.CurrentStreak(today), h.LongestStreak(today),
+			core.PercentLabel(h.CompletionRate(days, today)))
 	}
 	return w.Flush()
 }

@@ -98,6 +98,8 @@ pomodoro habit check <habit-id>
 pomodoro history 20
 pomodoro report                          # focus time by project, last 7 days
 pomodoro report 30                       # widen the window
+pomodoro report habits                   # streaks and completion rate, highest current streak first
+pomodoro report habits 7                 # narrow the completion-rate window
 pomodoro where                           # where your data lives
 ```
 
@@ -126,6 +128,12 @@ show first — the same session records `history` lists individually,
 rolled up instead of itemized. A session's project is stored on the
 session itself, so a report still totals correctly under a project's
 name even after it has since been renamed or deleted.
+
+`report habits` ranks habits by current streak (longest first, ties
+keeping their list order), alongside each habit's longest streak on
+record and its completion rate over a trailing window (30 days by
+default) — the same per-habit figures `habit list` shows, but sorted so
+the habit most in need of attention is easy to spot.
 
 ## How progress is measured
 

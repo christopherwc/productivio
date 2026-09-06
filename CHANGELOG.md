@@ -109,6 +109,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a "Clear done" button on the GUI tasks view now expose it: delete
   every completed task in one step instead of removing them one at a
   time with `task rm`.
+- **Habit streak report.** `pomodoro report habits [n]` ranks every
+  habit by current streak (longest first, ties keeping list order),
+  alongside its longest streak on record and its completion rate over
+  a trailing window (`n` days, default 30) — the same figures `habit
+  list` already computes per habit via `CurrentStreak`, `LongestStreak`
+  and `CompletionRate`, now ranked across all of them at once via a new
+  `Habits.ByCurrentStreak`.
 
 ### Fixed
 
