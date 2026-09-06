@@ -247,6 +247,84 @@ func TestTaskCommands(t *testing.T) {
 		})
 	})
 
+	t.Run("priority", func(t *testing.T) {
+		h.run("task", "add", "Low prio", "1", "-", "-", "low")
+		lowID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+		h.run("task", "add", "High prio", "1", "-", "-", "high")
+		highID := h.env.Store.LoadTasks()[len(h.env.Store.LoadTasks())-1].ID
+
+		t.Run("add sets the priority", func(t *testing.T) {
+			tasks := h.env.Store.LoadTasks()
+			low, _ := tasks.Find(lowID)
+			high, _ := tasks.Find(highID)
+			if low.Priority.String() != "low" || high.Priority.String() != "high" {
+				t.Errorf("priorities = %v, %v", low.Priority, high.Priority)
+			}
+		})
+
+		t.Run("add defaults to no priority", func(t *testing.T) {
+			h.run("task", "add", "No prio")
+			tasks := h.env.Store.LoadTasks()
+			last := tasks[len(tasks)-1]
+			if last.Priority.String() != "-" {
+				t.Errorf("Priority = %v, want none", last.Priority)
+			}
+		})
+
+		t.Run("the priority subcommand changes it", func(t *testing.T) {
+			if code := h.run("task", "priority", lowID, "high"); code != exitOK {
+				t.Fatalf("exit code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "Low prio priority: high") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			task, _ := h.env.Store.LoadTasks().Find(lowID)
+			if task.Priority.String() != "high" {
+				t.Errorf("Priority = %v, want high", task.Priority)
+			}
+			h.run("task", "priority", lowID, "low") // put it back
+		})
+
+		t.Run("list shows the priority column", func(t *testing.T) {
+			h.run("task", "list")
+			if !strings.Contains(h.stdout(), "high") || !strings.Contains(h.stdout(), "low") {
+				t.Errorf("output should show priorities:\n%s", h.stdout())
+			}
+		})
+
+		t.Run("list sorts highest priority first", func(t *testing.T) {
+			h.run("task", "list")
+			out := h.stdout()
+			if strings.Index(out, "High prio") > strings.Index(out, "Low prio") {
+				t.Errorf("high priority should list before low:\n%s", out)
+			}
+		})
+
+		t.Run("list filters to one priority level", func(t *testing.T) {
+			h.run("task", "list", "high")
+			out := h.stdout()
+			if !strings.Contains(out, "High prio") || strings.Contains(out, "Low prio") {
+				t.Errorf("output should contain only the high task:\n%s", out)
+			}
+		})
+
+		t.Run("list reports when a filter matches nothing", func(t *testing.T) {
+			h.run("task", "list", "medium")
+			if !strings.Contains(h.stdout(), "No tasks at that priority.") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+
+		t.Run("the priority subcommand rejects a bad level", func(t *testing.T) {
+			if code := h.run("task", "priority", lowID, "urgent"); code == exitOK {
+				t.Error("expected a non-zero exit code")
+			}
+		})
+
+		h.run("task", "rm", lowID)
+		h.run("task", "rm", highID)
+	})
+
 	t.Run("done toggles both ways", func(t *testing.T) {
 		taskID := h.env.Store.LoadTasks()[0].ID
 		h.run("task", "done", taskID)
@@ -314,6 +392,11 @@ func TestTaskCommands(t *testing.T) {
 			{"task", "add", "T", "not-a-number"},
 			{"task", "add", "T", "1", "no-such-project"},
 			{"task", "add", "T", "1", "-", "not-a-date"},
+			{"task", "add", "T", "1", "-", "-", "urgent"},
+			{"task", "list", "urgent"},
+			{"task", "priority"},
+			{"task", "priority", "no-such-task", "high"},
+			{"task", "priority", "no-such-task"},
 			{"task", "done"},
 			{"task", "done", "no-such-task"},
 			{"task", "rm"},
@@ -938,6 +1021,7 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"task add":       func(map[string]string) []string { return []string{"task", "add", "New"} },
 		"task done":      func(i map[string]string) []string { return []string{"task", "done", i["task"]} },
 		"task rm":        func(i map[string]string) []string { return []string{"task", "rm", i["task"]} },
+		"task priority":  func(i map[string]string) []string { return []string{"task", "priority", i["task"], "high"} },
 		"task clear":     func(map[string]string) []string { return []string{"task", "clear"} },
 		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
 		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
