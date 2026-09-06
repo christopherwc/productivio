@@ -116,6 +116,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their original order) and takes an optional level to filter down to
   just that priority. Stored by name (`"priority": "high"`) rather than
   as a number, matching the rest of the model's hand-editable JSON.
+- **Habit streak report.** `pomodoro report habits [n]` ranks every
+  habit by current streak (longest first, ties keeping list order),
+  alongside its longest streak on record and its completion rate over
+  a trailing window (`n` days, default 30) — the same figures `habit
+  list` already computes per habit via `CurrentStreak`, `LongestStreak`
+  and `CompletionRate`, now ranked across all of them at once via a new
+  `Habits.ByCurrentStreak`.
 
 ### Fixed
 

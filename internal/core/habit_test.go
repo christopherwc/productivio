@@ -485,6 +485,34 @@ func TestHabitCollection(t *testing.T) {
 	})
 }
 
+func TestHabitByCurrentStreak(t *testing.T) {
+	var habits Habits
+	a, _ := habits.Add("A", Daily, fixedToday) // no streak
+	b, _ := habits.Add("B", Daily, fixedToday) // streak 5
+	c, _ := habits.Add("C", Daily, fixedToday) // streak 2
+	d, _ := habits.Add("D", Daily, fixedToday) // streak 5, ties with B
+	_ = a
+	b.Completions = daysBack(5, fixedToday)
+	c.Completions = daysBack(2, fixedToday)
+	d.Completions = daysBack(5, fixedToday)
+
+	sorted := habits.ByCurrentStreak(fixedToday)
+	var names []string
+	for _, h := range sorted {
+		names = append(names, h.Name)
+	}
+	// B and D tie at 5 and keep their original relative order (B before
+	// D), ahead of C's 2 and A's 0.
+	if !equalStrings(names, []string{"B", "D", "C", "A"}) {
+		t.Errorf("order = %v", names)
+	}
+
+	// The original list is untouched.
+	if habits[0] != a || habits[1] != b || habits[2] != c || habits[3] != d {
+		t.Error("ByCurrentStreak should not reorder the receiver")
+	}
+}
+
 func TestEqualIntsMismatches(t *testing.T) {
 	// ScheduleLabel relies on this; a wrong answer would mislabel every
 	// custom schedule.

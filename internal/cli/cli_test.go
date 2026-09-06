@@ -940,6 +940,76 @@ func TestReportCommand(t *testing.T) {
 	})
 }
 
+func TestReportHabitsCommand(t *testing.T) {
+	h := newHarness(t)
+
+	t.Run("no habits", func(t *testing.T) {
+		h.run("report", "habits")
+		if !strings.Contains(h.stdout(), "No habits yet.") {
+			t.Errorf("output = %q", h.stdout())
+		}
+	})
+
+	h.run("habit", "add", "Meditate", "daily")
+	meditateID := firstID(t, h.stdout())
+	h.run("habit", "add", "Gym", "daily")
+
+	// Meditate has a 3-day streak; Gym has none.
+	for i := 2; i >= 0; i-- {
+		day := h.env.Today().AddDays(-i)
+		habits := h.env.Store.LoadHabits()
+		habit, err := habits.Find(meditateID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		habit.Mark(day, true)
+		if err := h.env.Store.SaveHabits(habits); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("lists streaks with the longer streak first", func(t *testing.T) {
+		h.run("report", "habits")
+		out := h.stdout()
+		if !strings.Contains(out, "Meditate") || !strings.Contains(out, "Gym") {
+			t.Errorf("output should list both habits:\n%s", out)
+		}
+		if strings.Index(out, "Meditate") > strings.Index(out, "Gym") {
+			t.Errorf("Meditate's streak should sort ahead of Gym's:\n%s", out)
+		}
+		var meditateLine string
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "Meditate") {
+				meditateLine = line
+			}
+		}
+		fields := strings.Fields(meditateLine)
+		// Meditate  Every day  3  3  100%
+		if len(fields) < 5 || fields[len(fields)-3] != "3" || fields[len(fields)-2] != "3" {
+			t.Errorf("Meditate's row should show a current and longest streak of 3: %q", meditateLine)
+		}
+	})
+
+	t.Run("the completion-rate window defaults to 30 days and can be widened", func(t *testing.T) {
+		h.run("report", "habits")
+		if !strings.Contains(h.stdout(), "30D RATE") {
+			t.Errorf("header should show the default window:\n%s", h.stdout())
+		}
+		h.run("report", "habits", "7")
+		if !strings.Contains(h.stdout(), "7D RATE") {
+			t.Errorf("header should show the widened window:\n%s", h.stdout())
+		}
+	})
+
+	t.Run("argument errors", func(t *testing.T) {
+		for _, arg := range []string{"abc", "0", "-3"} {
+			if code := h.run("report", "habits", arg); code == exitOK {
+				t.Errorf("report habits %q should have failed", arg)
+			}
+		}
+	})
+}
+
 // saveOldSession saves one extra unattributed session dated daysAgo
 // before the harness's fixed clock, directly through the store — the
 // only way to get a session outside "today" without a clock that
