@@ -361,6 +361,18 @@ func (hs Habits) Move(id string, delta int) (int, error) {
 		})
 }
 
+// ByCurrentStreak returns a copy of the habits ordered by longest
+// current streak first. Ties keep their relative list order, so the
+// report stays predictable rather than shuffling habits that tie.
+func (hs Habits) ByCurrentStreak(today Date) Habits {
+	out := make(Habits, len(hs))
+	copy(out, hs)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CurrentStreak(today) > out[j].CurrentStreak(today)
+	})
+	return out
+}
+
 // Due returns the habits scheduled for a day that are not yet done.
 func (hs Habits) Due(day Date) Habits {
 	var out Habits
