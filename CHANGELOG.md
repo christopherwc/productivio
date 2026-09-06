@@ -109,6 +109,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a "Clear done" button on the GUI tasks view now expose it: delete
   every completed task in one step instead of removing them one at a
   time with `task rm`.
+- **Task priorities.** A task can carry a priority (low, medium or
+  high, or none by default) — `pomodoro task add <title> [n] [proj|-]
+  [due|-] [priority]`, or `pomodoro task priority <id> <level>` to
+  change it later. `task list` sorts highest priority first (ties keep
+  their original order) and takes an optional level to filter down to
+  just that priority. Stored by name (`"priority": "high"`) rather than
+  as a number, matching the rest of the model's hand-editable JSON.
 - **Habit streak report.** `pomodoro report habits [n]` ranks every
   habit by current streak (longest first, ties keeping list order),
   alongside its longest streak on record and its completion rate over

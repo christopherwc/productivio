@@ -76,8 +76,9 @@ const usage = `pomodoro — a focus timer with tasks, habits and projects
 Usage:
   pomodoro status                     Today's summary
   pomodoro start [flags]              Run a work interval
-  pomodoro task list                   List tasks, due dates and overdue flags
-  pomodoro task add <title> [n] [proj|-] [due]  Add a task, optionally due YYYY-MM-DD
+  pomodoro task list [priority]         List tasks, highest priority first
+  pomodoro task add <title> [n] [proj|-] [due|-] [priority]  Add a task
+  pomodoro task priority <id> <level>  Set priority: low, medium or high
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
   pomodoro task clear                 Delete every completed task
@@ -346,7 +347,7 @@ func intArg(args []string, i int) (int, error) {
 
 func cmdTask(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("task needs a subcommand: list, add, done, rm or clear")
+		return usageErrorf("task needs a subcommand: list, add, priority, done, rm or clear")
 	}
 	tasks := env.Store.LoadTasks()
 	projects := env.Store.LoadProjects()
@@ -354,13 +355,30 @@ func cmdTask(env *Env, args []string) error {
 
 	switch args[0] {
 	case "list":
-		if len(tasks) == 0 {
-			fmt.Fprintln(env.Out, "No tasks yet.")
+		filter := core.PriorityNone
+		filtered := false
+		if len(args) >= 2 {
+			parsed, err := core.ParsePriority(args[1])
+			if err != nil {
+				return usageErrorf("%s", err)
+			}
+			filter, filtered = parsed, true
+		}
+		shown := tasks.ByPriority()
+		if filtered {
+			shown = shown.WithPriority(filter)
+		}
+		if len(shown) == 0 {
+			if filtered {
+				fmt.Fprintln(env.Out, "No tasks at that priority.")
+			} else {
+				fmt.Fprintln(env.Out, "No tasks yet.")
+			}
 			return nil
 		}
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tDUE")
-		for _, t := range tasks {
+		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tPRIORITY\tDUE")
+		for _, t := range shown {
 			mark := " "
 			if t.Done {
 				mark = "x"
@@ -372,8 +390,8 @@ func cmdTask(env *Env, args []string) error {
 					due += " (overdue)"
 				}
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
-				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), due)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
+				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), t.Priority, due)
 		}
 		return w.Flush()
 
@@ -398,23 +416,51 @@ func cmdTask(env *Env, args []string) error {
 			projectID = p.ID
 		}
 		var due core.Date
-		if len(args) >= 5 {
+		if len(args) >= 5 && args[4] != "-" {
 			parsed, err := core.ParseDate(args[4])
 			if err != nil {
 				return usageErrorf("due date must be YYYY-MM-DD, got %q", args[4])
 			}
 			due = parsed
 		}
+		var priority core.Priority
+		if len(args) >= 6 {
+			parsed, err := core.ParsePriority(args[5])
+			if err != nil {
+				return usageErrorf("%s", err)
+			}
+			priority = parsed
+		}
 		task, err := tasks.Add(args[1], estimate, projectID)
 		if err != nil {
 			return err
 		}
 		task.Due = due
+		task.Priority = priority
 		if err := env.Store.SaveTasks(tasks); err != nil {
 			return err
 		}
 		fmt.Fprintf(env.Out, "Added %s  %s (%s)\n", task.ID, task.Title,
 			task.ProgressLabel())
+		return nil
+
+	case "priority":
+		if len(args) < 3 {
+			return usageErrorf("task priority needs a task id and a level (low, medium or high)")
+		}
+		task, err := tasks.Find(args[1])
+		if err != nil {
+			return err
+		}
+		priority, err := core.ParsePriority(args[2])
+		if err != nil {
+			return usageErrorf("%s", err)
+		}
+		task.Priority = priority
+		if err := env.Store.SaveTasks(tasks); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s priority: %s\n", task.Title, task.Priority)
 		return nil
 
 	case "done":
