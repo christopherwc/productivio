@@ -83,9 +83,10 @@ Usage:
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
   pomodoro task clear                 Delete every completed task
-  pomodoro project list               List projects, subprojects indented
-  pomodoro project add <name> [due|-] [parent]  Add a project, optionally under parent
+  pomodoro project list [priority]     List projects, subprojects indented; sibling groups sorted by priority
+  pomodoro project add <name> [due|-] [parent|-] [priority]  Add a project, optionally under parent
   pomodoro project parent <id> <parent|->  File under parent, or - to clear
+  pomodoro project priority <id> <level>  Set priority: low, medium or high
   pomodoro project done <id>          Mark a project complete
   pomodoro project hold <id>          Pause a project
   pomodoro project reopen <id>        Reactivate a completed or held project
@@ -557,7 +558,7 @@ func cmdTask(env *Env, args []string) error {
 
 func cmdProject(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("project needs a subcommand: list, add, parent, done, hold, reopen or rm")
+		return usageErrorf("project needs a subcommand: list, add, parent, priority, done, hold, reopen or rm")
 	}
 	projects := env.Store.LoadProjects()
 	tasks := env.Store.LoadTasks()
@@ -570,11 +571,37 @@ func cmdProject(env *Env, args []string) error {
 			fmt.Fprintln(env.Out, "No projects yet.")
 			return nil
 		}
+
+		if len(args) >= 2 {
+			priority, err := core.ParsePriority(args[1])
+			if err != nil {
+				return usageErrorf("%s", err)
+			}
+			matches := projects.WithPriority(priority)
+			if len(matches) == 0 {
+				fmt.Fprintln(env.Out, "No projects at that priority.")
+				return nil
+			}
+			w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tPROJECT\tPRIORITY\tSTATUS\tDUE")
+			for _, p := range matches {
+				due := "-"
+				if !p.Due.IsZero() {
+					due = p.Due.String()
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+					p.ID, projects.Path(p), p.Priority, p.Status, due)
+			}
+			return w.Flush()
+		}
+
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tPROJECT\tSTATUS\tTASKS\tPOMODOROS\tFOCUSED\tDUE")
+		fmt.Fprintln(w, "ID\tPROJECT\tPRIORITY\tSTATUS\tTASKS\tPOMODOROS\tFOCUSED\tDUE")
 		// Roots first, each followed immediately by its subprojects
 		// indented one level deeper, recursively — a tree, not a flat
 		// list, so a subproject always reads as filed under its parent.
+		// Each sibling group is sorted highest priority first, so the
+		// ordering is meaningful without disturbing the tree's shape.
 		var printProject func(p *core.Project, depth int)
 		printProject = func(p *core.Project, depth int) {
 			s := projects.Summarize(p, tasks, sessions, today)
@@ -582,16 +609,16 @@ func cmdProject(env *Env, args []string) error {
 			if !p.Due.IsZero() {
 				due = p.Due.String()
 			}
-			fmt.Fprintf(w, "%s\t%s%s\t%s\t%d/%d (%s)\t%d/%d\t%s\t%s\n",
-				p.ID, strings.Repeat("  ", depth), p.Name, s.Health,
+			fmt.Fprintf(w, "%s\t%s%s\t%s\t%s\t%d/%d (%s)\t%d/%d\t%s\t%s\n",
+				p.ID, strings.Repeat("  ", depth), p.Name, p.Priority, s.Health,
 				s.TasksDone, s.TasksTotal, core.PercentLabel(s.TaskFraction),
 				s.PomodorosDone, s.PomodorosEstimated,
 				core.FormatMinutes(s.Minutes), due)
-			for _, child := range projects.Children(p.ID) {
+			for _, child := range projects.Children(p.ID).ByPriority() {
 				printProject(child, depth+1)
 			}
 		}
-		for _, p := range projects.Children("") {
+		for _, p := range projects.Children("").ByPriority() {
 			printProject(p, 0)
 		}
 		return w.Flush()
@@ -609,12 +636,20 @@ func cmdProject(env *Env, args []string) error {
 			due = parsed
 		}
 		var parent *core.Project
-		if len(args) >= 4 {
+		if len(args) >= 4 && args[3] != "-" {
 			p, err := projects.Find(args[3])
 			if err != nil {
 				return err
 			}
 			parent = p
+		}
+		var priority core.Priority
+		if len(args) >= 5 {
+			parsed, err := core.ParsePriority(args[4])
+			if err != nil {
+				return usageErrorf("%s", err)
+			}
+			priority = parsed
 		}
 		project, err := projects.Add(args[1], "", due, today)
 		if err != nil {
@@ -625,10 +660,30 @@ func cmdProject(env *Env, args []string) error {
 			// ancestor of parent, so no cycle is possible here.
 			_ = projects.SetParent(project.ID, parent.ID)
 		}
+		project.Priority = priority
 		if err := env.Store.SaveProjects(projects); err != nil {
 			return err
 		}
 		fmt.Fprintf(env.Out, "Added %s  %s\n", project.ID, project.Name)
+		return nil
+
+	case "priority":
+		if len(args) < 3 {
+			return usageErrorf("project priority needs a project id and a level (low, medium or high)")
+		}
+		project, err := projects.Find(args[1])
+		if err != nil {
+			return err
+		}
+		priority, err := core.ParsePriority(args[2])
+		if err != nil {
+			return usageErrorf("%s", err)
+		}
+		project.Priority = priority
+		if err := env.Store.SaveProjects(projects); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s priority: %s\n", project.Name, project.Priority)
 		return nil
 
 	case "parent":

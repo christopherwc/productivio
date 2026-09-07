@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // Project statuses.
 const (
@@ -36,14 +39,15 @@ const AtRiskSlip = 0.25
 // because every completed pomodoro already records which task it
 // served, focus time rolls up into project-level reporting.
 type Project struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Status      string  `json:"status"`
-	Created     Date    `json:"created"`
-	Due         Date    `json:"due"`
-	CompletedAt *string `json:"completed_at"`
-	ParentID    string  `json:"parent_id"` // owning project, or empty for a top-level project
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Status      string   `json:"status"`
+	Created     Date     `json:"created"`
+	Due         Date     `json:"due"`
+	CompletedAt *string  `json:"completed_at"`
+	ParentID    string   `json:"parent_id"` // owning project, or empty for a top-level project
+	Priority    Priority `json:"priority"`  // urgency, or PriorityNone for unset; see Task.Priority
 }
 
 // Projects is the ordered project list.
@@ -467,6 +471,30 @@ func (ps Projects) Move(id string, delta int) (int, error) {
 			copyShift(ps, from, to)
 			ps[to] = item
 		})
+}
+
+// WithPriority returns the projects at exactly the given priority
+// level, in list order.
+func (ps Projects) WithPriority(p Priority) Projects {
+	var out Projects
+	for _, project := range ps {
+		if project.Priority == p {
+			out = append(out, project)
+		}
+	}
+	return out
+}
+
+// ByPriority returns a copy of the projects ordered highest priority
+// first. Equal priorities keep their relative order, so `project
+// list` stays predictable rather than shuffling projects that tie —
+// mirrors Tasks.ByPriority, applied per sibling group so it can sort
+// each level of the project tree without disturbing its shape.
+func (ps Projects) ByPriority() Projects {
+	out := make(Projects, len(ps))
+	copy(out, ps)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority > out[j].Priority })
+	return out
 }
 
 // Active returns the projects that are neither completed nor on hold.

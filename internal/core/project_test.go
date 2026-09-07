@@ -769,3 +769,71 @@ func TestProjectHierarchy(t *testing.T) {
 		}
 	})
 }
+
+func projectNames(projects Projects) []string {
+	out := make([]string, len(projects))
+	for i, p := range projects {
+		out[i] = p.Name
+	}
+	return out
+}
+
+func TestProjectPriority(t *testing.T) {
+	t.Run("a new project starts with no priority", func(t *testing.T) {
+		p := mustProject(t, "Website")
+		if p.Priority != PriorityNone {
+			t.Errorf("Priority = %v, want none", p.Priority)
+		}
+	})
+
+	t.Run("WithPriority filters to exactly one level", func(t *testing.T) {
+		var projects Projects
+		a, _ := projects.Add("A", "", Date{}, fixedToday)
+		b, _ := projects.Add("B", "", Date{}, fixedToday)
+		c, _ := projects.Add("C", "", Date{}, fixedToday)
+		a.Priority, c.Priority = PriorityHigh, PriorityHigh
+		b.Priority = PriorityLow
+
+		if got := projectNames(projects.WithPriority(PriorityHigh)); !equalStrings(got, []string{"A", "C"}) {
+			t.Errorf("high = %v", got)
+		}
+		if got := projectNames(projects.WithPriority(PriorityLow)); !equalStrings(got, []string{"B"}) {
+			t.Errorf("low = %v", got)
+		}
+		if got := projects.WithPriority(PriorityMedium); len(got) != 0 {
+			t.Errorf("medium = %v, want none", got)
+		}
+	})
+
+	t.Run("ByPriority sorts highest first and keeps ties in list order", func(t *testing.T) {
+		var projects Projects
+		_, _ = projects.Add("A", "", Date{}, fixedToday)  // none
+		b, _ := projects.Add("B", "", Date{}, fixedToday) // high
+		c, _ := projects.Add("C", "", Date{}, fixedToday) // low
+		d, _ := projects.Add("D", "", Date{}, fixedToday) // high
+		b.Priority, c.Priority, d.Priority = PriorityHigh, PriorityLow, PriorityHigh
+
+		if got := projectNames(projects.ByPriority()); !equalStrings(got, []string{"B", "D", "C", "A"}) {
+			t.Errorf("order = %v", got)
+		}
+		// The original list is untouched.
+		if got := projectNames(projects); !equalStrings(got, []string{"A", "B", "C", "D"}) {
+			t.Errorf("original order changed: %v", got)
+		}
+	})
+
+	t.Run("round-trips through JSON by name", func(t *testing.T) {
+		project := mustProject(t, "Website")
+		project.Priority = PriorityHigh
+		projects := Projects{project}
+
+		store := newTestStore(t)
+		if err := store.SaveProjects(projects); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := store.LoadProjects()
+		if len(reloaded) != 1 || reloaded[0].Priority != PriorityHigh {
+			t.Errorf("reloaded priority = %+v, want high", reloaded)
+		}
+	})
+}
