@@ -513,6 +513,83 @@ func TestHabitByCurrentStreak(t *testing.T) {
 	}
 }
 
+func TestHabitTags(t *testing.T) {
+	t.Run("a new habit starts with an empty, non-nil tag list", func(t *testing.T) {
+		habit := mustHabit(t, "Meditate", nil)
+		if habit.Tags == nil || len(habit.Tags) != 0 {
+			t.Errorf("Tags = %v, want an empty non-nil slice", habit.Tags)
+		}
+	})
+
+	t.Run("HasTag compares case-insensitively", func(t *testing.T) {
+		habit := mustHabit(t, "Meditate", nil)
+		habit.Tags = []string{"Morning", "wellness"}
+		if !habit.HasTag("morning") || !habit.HasTag("MORNING") {
+			t.Error("HasTag should ignore case")
+		}
+		if habit.HasTag("evening") {
+			t.Error("HasTag should not match an absent tag")
+		}
+	})
+
+	t.Run("WithTag filters to habits carrying a tag", func(t *testing.T) {
+		var habits Habits
+		a, _ := habits.Add("A", Daily, fixedToday)
+		b, _ := habits.Add("B", Daily, fixedToday)
+		c, _ := habits.Add("C", Daily, fixedToday)
+		a.Tags = []string{"morning"}
+		b.Tags = []string{"Morning", "wellness"}
+		c.Tags = []string{"wellness"}
+
+		if got := habitNames(habits.WithTag("morning")); !equalStrings(got, []string{"A", "B"}) {
+			t.Errorf("morning = %v", got)
+		}
+		if got := habitNames(habits.WithTag("wellness")); !equalStrings(got, []string{"B", "C"}) {
+			t.Errorf("wellness = %v", got)
+		}
+		if got := habits.WithTag("nope"); len(got) != 0 {
+			t.Errorf("nope = %v, want none", got)
+		}
+	})
+
+	t.Run("normalize cleans tags and never leaves nil", func(t *testing.T) {
+		habit := &Habit{ID: "a", Tags: []string{"Morning", " ", "morning", ""}}
+		habit.normalize()
+		if !equalStrings(habit.Tags, []string{"Morning"}) {
+			t.Errorf("Tags = %v, want [Morning]", habit.Tags)
+		}
+
+		empty := &Habit{ID: "b"}
+		empty.normalize()
+		if empty.Tags == nil || len(empty.Tags) != 0 {
+			t.Errorf("Tags = %v, want an empty non-nil slice", empty.Tags)
+		}
+	})
+
+	t.Run("round-trips through JSON as a plain array", func(t *testing.T) {
+		habit := mustHabit(t, "Meditate", nil)
+		habit.Tags = []string{"Morning", "wellness"}
+		habits := Habits{habit}
+
+		store := newTestStore(t)
+		if err := store.SaveHabits(habits); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := store.LoadHabits()
+		if len(reloaded) != 1 || !equalStrings(reloaded[0].Tags, []string{"Morning", "wellness"}) {
+			t.Errorf("reloaded tags = %+v, want [Morning wellness]", reloaded)
+		}
+	})
+}
+
+func habitNames(habits Habits) []string {
+	out := make([]string, len(habits))
+	for i, h := range habits {
+		out[i] = h.Name
+	}
+	return out
+}
+
 func TestEqualIntsMismatches(t *testing.T) {
 	// ScheduleLabel relies on this; a wrong answer would mislabel every
 	// custom schedule.

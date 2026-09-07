@@ -91,8 +91,9 @@ Usage:
   pomodoro project hold <id>          Pause a project
   pomodoro project reopen <id>        Reactivate a completed or held project
   pomodoro project rm <id>            Delete a project (tasks unfiled, subprojects promoted)
-  pomodoro habit list                 List habits with streaks
-  pomodoro habit add <name> [sched]   Add a habit (daily|weekdays|weekends)
+  pomodoro habit list [-tag TAG]       List habits with streaks
+  pomodoro habit add <name> [sched] [tags]  Add a habit (daily|weekdays|weekends)
+  pomodoro habit tag <id> <tags|->    Set comma-separated tags, or - to clear
   pomodoro habit check <id>           Toggle today's completion
   pomodoro history [n]                Show the last n sessions (default 10)
   pomodoro report [n]                  Focus time by project, last n days (default 7)
@@ -795,20 +796,33 @@ func cmdProject(env *Env, args []string) error {
 
 func cmdHabit(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("habit needs a subcommand: list, add or check")
+		return usageErrorf("habit needs a subcommand: list, add, tag or check")
 	}
 	habits := env.Store.LoadHabits()
 	today := env.Today()
 
 	switch args[0] {
 	case "list":
-		if len(habits) == 0 {
+		shown := habits
+		if len(args) >= 2 {
+			if args[1] != "-tag" && args[1] != "--tag" {
+				return usageErrorf("unknown flag %q for habit list", args[1])
+			}
+			if len(args) < 3 || args[2] == "" {
+				return usageErrorf("-tag needs a value")
+			}
+			shown = habits.WithTag(args[2])
+			if len(shown) == 0 {
+				fmt.Fprintln(env.Out, "No habits with that tag.")
+				return nil
+			}
+		} else if len(shown) == 0 {
 			fmt.Fprintln(env.Out, "No habits yet.")
 			return nil
 		}
 		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tHABIT\tSCHEDULE\tLAST 7\tSTREAK\t30D")
-		for _, h := range habits {
+		fmt.Fprintln(w, "ID\tHABIT\tSCHEDULE\tLAST 7\tSTREAK\t30D\tTAGS")
+		for _, h := range shown {
 			grid := strings.Builder{}
 			for _, day := range h.RecentWindow(7, today) {
 				switch {
@@ -820,10 +834,11 @@ func cmdHabit(env *Env, args []string) error {
 					grid.WriteString(" ")
 				}
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 				h.ID, h.Name, h.ScheduleLabel(), grid.String(),
 				h.CurrentStreak(today),
-				core.PercentLabel(h.CompletionRate(30, today)))
+				core.PercentLabel(h.CompletionRate(30, today)),
+				core.FormatTags(h.Tags))
 		}
 		return w.Flush()
 
@@ -839,15 +854,42 @@ func cmdHabit(env *Env, args []string) error {
 			}
 			days = parsed
 		}
+		tags := []string{}
+		if len(args) >= 4 {
+			tags = core.ParseTags(args[3])
+			if tags == nil {
+				tags = []string{}
+			}
+		}
 		habit, err := habits.Add(args[1], days, today)
 		if err != nil {
 			return err
 		}
+		habit.Tags = tags
 		if err := env.Store.SaveHabits(habits); err != nil {
 			return err
 		}
 		fmt.Fprintf(env.Out, "Added %s  %s (%s)\n", habit.ID, habit.Name,
 			habit.ScheduleLabel())
+		return nil
+
+	case "tag":
+		if len(args) < 3 {
+			return usageErrorf("habit tag needs a habit id and a comma-separated list of tags (or - to clear)")
+		}
+		habit, err := habits.Find(args[1])
+		if err != nil {
+			return err
+		}
+		tags := core.ParseTags(args[2])
+		if tags == nil {
+			tags = []string{}
+		}
+		habit.Tags = tags
+		if err := env.Store.SaveHabits(habits); err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "%s tags: %s\n", habit.Name, core.FormatTags(habit.Tags))
 		return nil
 
 	case "check":

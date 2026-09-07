@@ -145,6 +145,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   projects at that priority (`Projects.WithPriority`) — a tree layout
   does not make sense once projects and their ancestors are filtered
   independently.
+- **Habit tags.** Mirrors task tags: a habit can carry freeform tags
+  via `habit add`'s new optional argument or `pomodoro habit tag <id>
+  <tags|->` to replace them later (`-` clears). `habit list -tag <tag>`
+  filters the list to habits carrying it, reusing the same
+  `ParseTags`/`FormatTags`/`cleanTags` helpers tasks already share.
 
 ### Fixed
 
