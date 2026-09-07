@@ -288,7 +288,9 @@ tracks Fyne's dependency tree independently of the Actions one above.
 
 `gui/` is a native desktop GUI (Fyne) with seven tabs — Dashboard,
 Tasks, Projects, Habits, Timer, Report, History — mirroring what the
-CLI already does, plus a File menu with Quit. Run it with:
+CLI already does, plus a File menu with Quit. The Tasks tab has
+priority and tag filter controls above the list, mirroring the CLI's
+`task list [priority]` and `task list -tag`. Run it with:
 
 ```bash
 cd gui

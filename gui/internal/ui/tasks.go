@@ -22,6 +22,9 @@ func taskRowText(t *core.Task, projects core.Projects, today core.Date) string {
 		parts = append(parts, projects.NameOf(t.ProjectID, "-"))
 	}
 	parts = append(parts, t.ProgressLabel())
+	if t.Priority != core.PriorityNone {
+		parts = append(parts, t.Priority.String())
+	}
 	if !t.Due.IsZero() {
 		due := "due " + t.Due.String()
 		if t.IsOverdue(today) {
@@ -29,7 +32,34 @@ func taskRowText(t *core.Task, projects core.Projects, today core.Date) string {
 		}
 		parts = append(parts, due)
 	}
+	if len(t.Tags) > 0 {
+		parts = append(parts, core.FormatTags(t.Tags))
+	}
 	return strings.Join(parts, "  ·  ")
+}
+
+// filteredTasks applies the priority and tag filters the Tasks tab's
+// controls offer, mirroring the CLI's `task list [priority]` and
+// `task list -tag`. "All" is the un-filtered state, distinct from
+// filtering to exactly PriorityNone tasks, which "None" names
+// explicitly. Kept separate from the widget wiring below so it can be
+// tested without a Fyne driver.
+func filteredTasks(tasks core.Tasks, priority, tag string) core.Tasks {
+	filtered := tasks
+	switch priority {
+	case "None":
+		filtered = filtered.WithPriority(core.PriorityNone)
+	case "Low":
+		filtered = filtered.WithPriority(core.PriorityLow)
+	case "Medium":
+		filtered = filtered.WithPriority(core.PriorityMedium)
+	case "High":
+		filtered = filtered.WithPriority(core.PriorityHigh)
+	}
+	if tag = strings.TrimSpace(tag); tag != "" {
+		filtered = filtered.WithTag(tag)
+	}
+	return filtered
 }
 
 // Row indices into the container newTaskRow builds, so updateItem can
@@ -63,9 +93,25 @@ func newTaskRow() fyne.CanvasObject {
 func NewTasksTab(env *app.Env) fyne.CanvasObject {
 	var tasks core.Tasks
 	var projects core.Projects
+	var shown core.Tasks
 
 	var list *widget.List
 	var refresh func()
+	var applyFilters func()
+
+	// "All" is the un-filtered state, distinct from filtering to
+	// exactly PriorityNone tasks, which "None" names explicitly.
+	priorityFilter := widget.NewSelect([]string{"All", "None", "Low", "Medium", "High"}, nil)
+	priorityFilter.SetSelected("All")
+	tagFilter := widget.NewEntry()
+	tagFilter.SetPlaceHolder("Filter by tag")
+
+	applyFilters = func() {
+		shown = filteredTasks(tasks, priorityFilter.Selected, tagFilter.Text)
+		list.Refresh()
+	}
+	priorityFilter.OnChanged = func(string) { applyFilters() }
+	tagFilter.OnChanged = func(string) { applyFilters() }
 
 	save := func() {
 		_ = env.Store.SaveTasks(tasks)
@@ -74,11 +120,11 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 	refresh = func() {
 		tasks = env.Store.LoadTasks()
 		projects = env.Store.LoadProjects()
-		list.Refresh()
+		applyFilters()
 	}
 	updateRow := func(id widget.ListItemID, obj fyne.CanvasObject) {
 		row := obj.(*fyne.Container).Objects
-		task := tasks[id]
+		task := shown[id]
 
 		check := row[taskRowCheck].(*widget.Check)
 		check.Checked = task.Done
@@ -104,7 +150,7 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		}
 	}
 
-	list = widget.NewList(func() int { return len(tasks) }, newTaskRow, updateRow)
+	list = widget.NewList(func() int { return len(shown) }, newTaskRow, updateRow)
 	refresh()
 
 	titleEntry := widget.NewEntry()
@@ -171,10 +217,16 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		addButton)
 	addForm := container.NewBorder(nil, nil, nil, trailing, titleEntry)
 
+	filterRow := container.NewHBox(
+		widget.NewLabel("Priority:"),
+		priorityFilter,
+		container.NewGridWrap(fyne.NewSize(140, tagFilter.MinSize().Height), tagFilter))
+
 	clearButton := widget.NewButton("Clear done", func() {
 		tasks.ClearCompleted()
 		save()
 	})
 
-	return container.NewBorder(addForm, clearButton, nil, nil, list)
+	top := container.NewVBox(addForm, filterRow)
+	return container.NewBorder(top, clearButton, nil, nil, list)
 }
