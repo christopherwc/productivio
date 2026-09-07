@@ -154,6 +154,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   case-insensitive title substring (`Tasks.Search`), printed through
   the same table `task list` uses — both commands now share one
   `printTaskTable` so their columns cannot drift apart.
+- **GUI task filtering.** The Tasks tab gained a priority dropdown
+  (All/None/Low/Medium/High) and a tag text field above the list,
+  mirroring `task list [priority]` and `task list -tag`. Filtering
+  logic lives in a new `filteredTasks`, tested without a Fyne driver
+  the same way `taskRowText` is; each row now also shows its priority
+  and tags when set, so a filtered result is visibly explained.
+  Verified against the real binary under Xvfb: seeded tasks via the
+  CLI with priorities and tags, then confirmed both filter controls
+  narrow the GUI list correctly.
 
 ### Fixed
 
