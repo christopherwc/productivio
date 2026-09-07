@@ -80,6 +80,7 @@ Usage:
   pomodoro task add <title> [n] [proj|-] [due|-] [priority|-] [tags]  Add a task
   pomodoro task priority <id> <level>  Set priority: low, medium or high
   pomodoro task tag <id> <tags|->     Set comma-separated tags, or - to clear
+  pomodoro task search <text>         Find tasks by title substring
   pomodoro task done <id>             Toggle a task complete
   pomodoro task rm <id>               Delete a task
   pomodoro task clear                 Delete every completed task
@@ -348,9 +349,34 @@ func intArg(args []string, i int) (int, error) {
 
 // --- tasks -----------------------------------------------------------
 
+// printTaskTable renders the shared task table `list` and `search`
+// both use, so the two commands cannot drift into different column
+// layouts.
+func printTaskTable(env *Env, shown core.Tasks, projects core.Projects, today core.Date) error {
+	w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tPRIORITY\tDUE\tTAGS")
+	for _, t := range shown {
+		mark := " "
+		if t.Done {
+			mark = "x"
+		}
+		due := "-"
+		if !t.Due.IsZero() {
+			due = t.Due.String()
+			if t.IsOverdue(today) {
+				due += " (overdue)"
+			}
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
+			projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), t.Priority, due,
+			core.FormatTags(t.Tags))
+	}
+	return w.Flush()
+}
+
 func cmdTask(env *Env, args []string) error {
 	if len(args) == 0 {
-		return usageErrorf("task needs a subcommand: list, add, priority, tag, done, rm or clear")
+		return usageErrorf("task needs a subcommand: list, add, priority, tag, search, done, rm or clear")
 	}
 	tasks := env.Store.LoadTasks()
 	projects := env.Store.LoadProjects()
@@ -395,25 +421,18 @@ func cmdTask(env *Env, args []string) error {
 			}
 			return nil
 		}
-		w := tabwriter.NewWriter(env.Out, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\t \tTASK\tPROJECT\tPOMODOROS\tPRIORITY\tDUE\tTAGS")
-		for _, t := range shown {
-			mark := " "
-			if t.Done {
-				mark = "x"
-			}
-			due := "-"
-			if !t.Due.IsZero() {
-				due = t.Due.String()
-				if t.IsOverdue(today) {
-					due += " (overdue)"
-				}
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, mark, t.Title,
-				projects.NameOf(t.ProjectID, "-"), t.ProgressLabel(), t.Priority, due,
-				core.FormatTags(t.Tags))
+		return printTaskTable(env, shown, projects, today)
+
+	case "search":
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+			return usageErrorf("task search needs a query")
 		}
-		return w.Flush()
+		shown := tasks.Search(args[1])
+		if len(shown) == 0 {
+			fmt.Fprintln(env.Out, "No tasks match that search.")
+			return nil
+		}
+		return printTaskTable(env, shown, projects, today)
 
 	case "add":
 		if len(args) < 2 {
