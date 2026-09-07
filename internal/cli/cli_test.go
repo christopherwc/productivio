@@ -406,6 +406,30 @@ func TestTaskCommands(t *testing.T) {
 		h.run("task", "rm", choreID)
 	})
 
+	t.Run("search", func(t *testing.T) {
+		h.run("task", "add", "Write the Report")
+		h.run("task", "add", "Buy milk")
+		h.run("task", "add", "Reportedly urgent")
+
+		t.Run("matches a title substring case-insensitively", func(t *testing.T) {
+			h.run("task", "search", "REPORT")
+			out := h.stdout()
+			if !strings.Contains(out, "Write the Report") || !strings.Contains(out, "Reportedly urgent") {
+				t.Errorf("output should contain both matches:\n%s", out)
+			}
+			if strings.Contains(out, "Buy milk") {
+				t.Errorf("output should not contain a non-match:\n%s", out)
+			}
+		})
+
+		t.Run("reports when nothing matches", func(t *testing.T) {
+			h.run("task", "search", "nope")
+			if !strings.Contains(h.stdout(), "No tasks match that search.") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+	})
+
 	t.Run("done toggles both ways", func(t *testing.T) {
 		taskID := h.env.Store.LoadTasks()[0].ID
 		h.run("task", "done", taskID)
@@ -482,6 +506,8 @@ func TestTaskCommands(t *testing.T) {
 			{"task", "tag"},
 			{"task", "tag", "no-such-task", "urgent"},
 			{"task", "tag", "no-such-task"},
+			{"task", "search"},
+			{"task", "search", "  "},
 			{"task", "done"},
 			{"task", "done", "no-such-task"},
 			{"task", "rm"},

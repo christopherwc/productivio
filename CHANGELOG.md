@@ -150,6 +150,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   <tags|->` to replace them later (`-` clears). `habit list -tag <tag>`
   filters the list to habits carrying it, reusing the same
   `ParseTags`/`FormatTags`/`cleanTags` helpers tasks already share.
+- **Task search.** `pomodoro task search <text>` finds tasks by a
+  case-insensitive title substring (`Tasks.Search`), printed through
+  the same table `task list` uses — both commands now share one
+  `printTaskTable` so their columns cannot drift apart.
 
 ### Fixed
 
