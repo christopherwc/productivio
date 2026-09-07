@@ -507,6 +507,40 @@ func TestTaskDeadlines(t *testing.T) {
 	})
 }
 
+func TestTaskSearch(t *testing.T) {
+	t.Run("matches a substring case-insensitively", func(t *testing.T) {
+		var tasks Tasks
+		tasks.Add("Write the Report", 1, "")
+		tasks.Add("Buy milk", 1, "")
+		tasks.Add("Reportedly urgent", 1, "")
+
+		if got := titles(tasks.Search("report")); !equalStrings(got, []string{"Write the Report", "Reportedly urgent"}) {
+			t.Errorf("Search(report) = %v", got)
+		}
+		if got := titles(tasks.Search("REPORT")); !equalStrings(got, []string{"Write the Report", "Reportedly urgent"}) {
+			t.Errorf("Search(REPORT) = %v", got)
+		}
+	})
+
+	t.Run("no matches returns an empty result", func(t *testing.T) {
+		var tasks Tasks
+		tasks.Add("Buy milk", 1, "")
+		if got := tasks.Search("nope"); len(got) != 0 {
+			t.Errorf("Search(nope) = %v, want none", got)
+		}
+	})
+
+	t.Run("a blank or whitespace-only query matches nothing", func(t *testing.T) {
+		var tasks Tasks
+		tasks.Add("Buy milk", 1, "")
+		for _, q := range []string{"", "   "} {
+			if got := tasks.Search(q); got != nil {
+				t.Errorf("Search(%q) = %v, want nil", q, got)
+			}
+		}
+	})
+}
+
 func TestTaskTags(t *testing.T) {
 	t.Run("ParseTags trims, drops empties, and dedupes case-insensitively", func(t *testing.T) {
 		got := ParseTags("Urgent, home , ,urgent,Errand")

@@ -99,6 +99,7 @@ pomodoro task tag <task-id> errand,phone # replace a task's tags, or - to clear
 pomodoro task list                       # highest priority first, DUE flagged once overdue
 pomodoro task list high                  # only high-priority tasks
 pomodoro task list -tag home             # only tasks tagged "home"
+pomodoro task search report              # find tasks by title substring
 pomodoro task clear                      # delete every completed task
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
@@ -150,6 +151,9 @@ A task can also carry freeform tags — a comma-separated list set via
 <tags|->` (`-` clears them). Tags are compared case-insensitively and
 deduplicated, and `task list -tag <tag>` filters the list down to tasks
 carrying one.
+
+`task search <text>` finds tasks by a case-insensitive title
+substring, printed in the same table `task list` uses.
 
 `report` breaks focused time down by project over a trailing window
 (7 days by default), sorted by minutes so the projects worked on most

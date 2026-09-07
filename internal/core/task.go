@@ -349,6 +349,23 @@ func (ts Tasks) WithPriority(p Priority) Tasks {
 	return out
 }
 
+// Search returns the tasks whose title contains the query, matched
+// case-insensitively, in list order. A blank query matches nothing,
+// since "every task" is what Open or the unfiltered list is for.
+func (ts Tasks) Search(query string) Tasks {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil
+	}
+	var out Tasks
+	for _, t := range ts {
+		if strings.Contains(strings.ToLower(t.Title), q) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // WithTag returns the tasks carrying a tag, in list order.
 func (ts Tasks) WithTag(tag string) Tasks {
 	var out Tasks
