@@ -17,6 +17,12 @@ const (
 	HabitsFile   = "habits.json"
 	ProjectsFile = "projects.json"
 
+	// ConfigFile holds persisted `start` defaults. Unlike the four
+	// files above, it has no Python-original counterpart: it is a
+	// single object, not an array, and a missing or corrupt file
+	// degrades to DefaultConfig rather than an empty list.
+	ConfigFile = "config.json"
+
 	// LegacySessionsFile is the dotfile the earliest Python versions
 	// wrote directly into the home directory. MigrateLegacy imports it
 	// once so no history is lost on upgrade.
@@ -235,6 +241,34 @@ func nonNil[T any](items []*T) []*T {
 		return []*T{}
 	}
 	return items
+}
+
+// LoadConfig reads persisted `start` defaults, falling back to
+// DefaultConfig for any field that is missing, zero or negative, or
+// if the file itself is absent or unparseable — the same tolerance
+// for a missing or damaged file every other Load method gives.
+func (s *Store) LoadConfig() Config {
+	cfg := DefaultConfig
+	data, err := os.ReadFile(s.Path(ConfigFile))
+	if err != nil {
+		return cfg
+	}
+	var loaded Config
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		return cfg
+	}
+	if loaded.WorkMinutes > 0 {
+		cfg.WorkMinutes = loaded.WorkMinutes
+	}
+	if loaded.RestMinutes > 0 {
+		cfg.RestMinutes = loaded.RestMinutes
+	}
+	return cfg
+}
+
+// SaveConfig persists the `start` defaults.
+func (s *Store) SaveConfig(cfg Config) error {
+	return s.writeJSON(ConfigFile, cfg)
 }
 
 // MigrateLegacy imports a pre-existing ~/.pomodoro_sessions.json once.

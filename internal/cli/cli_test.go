@@ -1007,6 +1007,30 @@ func TestStartCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("uses the configured defaults when no interval flags are given", func(t *testing.T) {
+		h := newHarness(t)
+		h.run("config", "set", "1", "1")
+		if code := h.run("start"); code != exitOK {
+			t.Fatalf("exit code = %d: %s", code, h.stderr())
+		}
+		sessions := h.env.Store.LoadSessions()
+		if len(sessions) != 1 || sessions[0].WorkMinutes != 1 {
+			t.Errorf("session = %+v, want 1 work minute from config", sessions)
+		}
+	})
+
+	t.Run("explicit flags override the configured defaults", func(t *testing.T) {
+		h := newHarness(t)
+		h.run("config", "set", "30", "15")
+		if code := h.run("start", "-work", "1", "-rest", "1"); code != exitOK {
+			t.Fatalf("exit code = %d: %s", code, h.stderr())
+		}
+		sessions := h.env.Store.LoadSessions()
+		if len(sessions) != 1 || sessions[0].WorkMinutes != 1 {
+			t.Errorf("session = %+v, want the flag's 1 minute, not the configured 30", sessions)
+		}
+	})
+
 	t.Run("credits the task and its project", func(t *testing.T) {
 		// The integration that makes focus time meaningful: naming a
 		// task also attributes the interval to its project.
@@ -1081,6 +1105,55 @@ func TestStartCommand(t *testing.T) {
 				}
 				if len(h.env.Store.LoadSessions()) != 0 {
 					t.Error("a failed start must not record a session")
+				}
+			})
+		}
+	})
+}
+
+func TestConfigCommand(t *testing.T) {
+	h := newHarness(t)
+
+	t.Run("shows the built-in defaults with no config saved", func(t *testing.T) {
+		h.run("config")
+		out := h.stdout()
+		if !strings.Contains(out, "Default work: 25 minutes") || !strings.Contains(out, "Default rest: 5 minutes") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
+	t.Run("set changes and persists the defaults", func(t *testing.T) {
+		if code := h.run("config", "set", "50", "10"); code != exitOK {
+			t.Fatalf("exit code = %d: %s", code, h.stderr())
+		}
+		if !strings.Contains(h.stdout(), "Default work: 50 minutes") || !strings.Contains(h.stdout(), "Default rest: 10 minutes") {
+			t.Errorf("output = %q", h.stdout())
+		}
+		cfg := h.env.Store.LoadConfig()
+		if cfg.WorkMinutes != 50 || cfg.RestMinutes != 10 {
+			t.Errorf("Config = %+v, want {50 10}", cfg)
+		}
+
+		h.run("config")
+		if !strings.Contains(h.stdout(), "Default work: 50 minutes") {
+			t.Errorf("output should reflect the saved config:\n%s", h.stdout())
+		}
+	})
+
+	t.Run("argument errors", func(t *testing.T) {
+		cases := [][]string{
+			{"config", "wat"},
+			{"config", "set"},
+			{"config", "set", "10"},
+			{"config", "set", "not-a-number", "10"},
+			{"config", "set", "10", "not-a-number"},
+			{"config", "set", "0", "10"},
+			{"config", "set", "10", "-5"},
+		}
+		for _, args := range cases {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				if code := h.run(args...); code == exitOK {
+					t.Error("expected a non-zero exit code")
 				}
 			})
 		}
@@ -1313,6 +1386,7 @@ func (f failingStore) SaveSessions(core.Sessions) error { return f.err }
 func (f failingStore) SaveTasks(core.Tasks) error       { return f.err }
 func (f failingStore) SaveHabits(core.Habits) error     { return f.err }
 func (f failingStore) SaveProjects(core.Projects) error { return f.err }
+func (f failingStore) SaveConfig(core.Config) error     { return f.err }
 
 // taskFailingStore refuses only task writes. During `start -task` the
 // session is saved first, so a store that failed everything would stop
@@ -1385,6 +1459,7 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"start -task": func(i map[string]string) []string {
 			return []string{"start", "-work", "1", "-rest", "1", "-task", i["task"]}
 		},
+		"config set": func(map[string]string) []string { return []string{"config", "set", "10", "5"} },
 	}
 
 	for name, build := range commands {

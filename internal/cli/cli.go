@@ -37,6 +37,8 @@ type Store interface {
 	SaveHabits(core.Habits) error
 	LoadProjects() core.Projects
 	SaveProjects(core.Projects) error
+	LoadConfig() core.Config
+	SaveConfig(core.Config) error
 }
 
 // Env is everything a command needs from the outside world.
@@ -99,12 +101,14 @@ Usage:
   pomodoro history [n]                Show the last n sessions (default 10)
   pomodoro report [n]                  Focus time by project, last n days (default 7)
   pomodoro report habits [n]           Streak report; completion rate over last n days (default 30)
+  pomodoro config                     Show default work/rest minutes for start
+  pomodoro config set <work> <rest>   Set default work/rest minutes for start
   pomodoro where                      Print the data directory
   pomodoro version                    Print version information
 
 Flags for start:
-  -work N     Work interval in minutes (default 25)
-  -rest N     Rest interval in minutes (default 5)
+  -work N     Work interval in minutes (default from config, else 25)
+  -rest N     Rest interval in minutes (default from config, else 5)
   -task ID    Credit the interval to a task, and to its project
 `
 
@@ -169,6 +173,8 @@ func Dispatch(env *Env, args []string) int {
 		err = cmdHistory(env, rest)
 	case "report":
 		err = cmdReport(env, rest)
+	case "config":
+		err = cmdConfig(env, rest)
 	case "where":
 		fmt.Fprintln(env.Out, env.Store.Dir())
 	case "version":
@@ -242,7 +248,8 @@ func cmdStatus(env *Env) error {
 // --- start -----------------------------------------------------------
 
 func cmdStart(env *Env, args []string) error {
-	work, rest, taskID := 25, 5, ""
+	cfg := env.Store.LoadConfig()
+	work, rest, taskID := cfg.WorkMinutes, cfg.RestMinutes, ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-work", "--work":
@@ -1056,6 +1063,39 @@ func cmdReportHabits(env *Env, args []string) error {
 			core.PercentLabel(h.CompletionRate(days, today)))
 	}
 	return w.Flush()
+}
+
+// --- config ------------------------------------------------------------
+
+func cmdConfig(env *Env, args []string) error {
+	if len(args) == 0 {
+		cfg := env.Store.LoadConfig()
+		fmt.Fprintf(env.Out, "Default work: %d minutes\nDefault rest: %d minutes\n",
+			cfg.WorkMinutes, cfg.RestMinutes)
+		return nil
+	}
+
+	if args[0] != "set" {
+		return usageErrorf("unknown config subcommand %q", args[0])
+	}
+	if len(args) < 3 {
+		return usageErrorf("config set needs work and rest minutes")
+	}
+	work, err := strconv.Atoi(args[1])
+	if err != nil || work < 1 {
+		return usageErrorf("work minutes must be a positive number, got %q", args[1])
+	}
+	rest, err := strconv.Atoi(args[2])
+	if err != nil || rest < 1 {
+		return usageErrorf("rest minutes must be a positive number, got %q", args[2])
+	}
+	cfg := core.Config{WorkMinutes: work, RestMinutes: rest}
+	if err := env.Store.SaveConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(env.Out, "Default work: %d minutes\nDefault rest: %d minutes\n",
+		cfg.WorkMinutes, cfg.RestMinutes)
+	return nil
 }
 
 func orDash(s string) string {

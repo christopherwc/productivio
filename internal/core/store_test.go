@@ -43,6 +43,44 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestConfig(t *testing.T) {
+	t.Run("a fresh store falls back to the defaults", func(t *testing.T) {
+		store := newTestStore(t)
+		if got := store.LoadConfig(); got != DefaultConfig {
+			t.Errorf("LoadConfig() = %+v, want %+v", got, DefaultConfig)
+		}
+	})
+
+	t.Run("round-trips a saved config", func(t *testing.T) {
+		store := newTestStore(t)
+		want := Config{WorkMinutes: 50, RestMinutes: 10}
+		if err := store.SaveConfig(want); err != nil {
+			t.Fatalf("SaveConfig: %v", err)
+		}
+		if got := store.LoadConfig(); got != want {
+			t.Errorf("LoadConfig() = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("a zero or negative field falls back to its default individually", func(t *testing.T) {
+		store := newTestStore(t)
+		write(t, store.Path(ConfigFile), `{"work_minutes": 45, "rest_minutes": -1}`)
+		got := store.LoadConfig()
+		want := Config{WorkMinutes: 45, RestMinutes: DefaultConfig.RestMinutes}
+		if got != want {
+			t.Errorf("LoadConfig() = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("a corrupt file falls back to the defaults", func(t *testing.T) {
+		store := newTestStore(t)
+		write(t, store.Path(ConfigFile), "{not valid json!!")
+		if got := store.LoadConfig(); got != DefaultConfig {
+			t.Errorf("LoadConfig() = %+v, want %+v", got, DefaultConfig)
+		}
+	})
+}
+
 func TestStoreTolerance(t *testing.T) {
 	// A missing, corrupt or wrongly-shaped file must not stop the
 	// application from starting. A corrupted history is a bad day; a

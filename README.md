@@ -101,7 +101,9 @@ pomodoro task list high                  # only high-priority tasks
 pomodoro task list -tag home             # only tasks tagged "home"
 pomodoro task search report              # find tasks by title substring
 pomodoro task clear                      # delete every completed task
-pomodoro start -task <task-id>           # 25/5 by default
+pomodoro start -task <task-id>           # 25/5 by default, or your configured default
+pomodoro config set 50 10                # default to 50/10 work/rest from now on
+pomodoro config                          # show the current defaults
 pomodoro habit add "Review inbox" weekdays
 pomodoro habit add "Meditate" daily "morning,wellness"   # tags
 pomodoro habit tag <habit-id> morning,wellness   # replace tags, or - to clear
@@ -120,6 +122,10 @@ project, and to the permanent session history in one step. That is the
 integration the whole design is built around: the timer knows what it
 is timing, so focus time becomes project-level data instead of generic
 minutes.
+
+`start`'s work/rest lengths default to 25/5 unless `config set <work>
+<rest>` has saved different defaults; `-work`/`-rest` on the command
+line always override whichever default is in effect.
 
 A project can be filed under another to build a tree of subprojects —
 `project list` prints it indented, and a subproject's task and effort
