@@ -86,6 +86,8 @@ pomodoro project add "Ship v1" 2026-09-30
 pomodoro project list                    # copy the id
 pomodoro project add "Checkout redesign" - <project-id>   # a subproject
 pomodoro project parent <id> <parent-id> # file an existing project under another
+pomodoro project priority <id> high      # low, medium or high
+pomodoro project list high               # only high-priority projects, flat
 pomodoro project hold <id>               # pause it; reopen brings it back
 pomodoro project rm <id>                 # delete it (tasks unfiled, subprojects promoted)
 pomodoro task add "Write docs" 4 <project-id>
@@ -121,6 +123,13 @@ progress rolls up into every one of its ancestors, at any depth. The
 tree rejects cycles: a project can never become its own ancestor.
 Deleting a project promotes its direct subprojects up one level rather
 than orphaning them.
+
+A project can also carry a priority (low, medium or high, or none by
+default), set on `project add` or changed with `project priority <id>
+<level>`. `project list` sorts each sibling group highest priority
+first without disturbing the tree's shape, and an optional argument
+switches to a flat, path-qualified view of just the projects at one
+level.
 
 A task can carry its own due date, independent of its project's —
 useful since a project's deadline says when the whole thing is due, not

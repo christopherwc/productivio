@@ -697,6 +697,83 @@ func TestProjectCommands(t *testing.T) {
 		})
 	})
 
+	t.Run("priority", func(t *testing.T) {
+		h.run("project", "add", "Low prio", "-", "-", "low")
+		lowID := firstID(t, h.stdout())
+		h.run("project", "add", "High prio", "2026-09-30", "-", "high")
+		highID := firstID(t, h.stdout())
+
+		t.Run("add sets the priority", func(t *testing.T) {
+			projects := h.env.Store.LoadProjects()
+			low, _ := projects.Find(lowID)
+			high, _ := projects.Find(highID)
+			if low.Priority.String() != "low" || high.Priority.String() != "high" {
+				t.Errorf("priorities = %v, %v", low.Priority, high.Priority)
+			}
+		})
+
+		t.Run("add defaults to no priority", func(t *testing.T) {
+			h.run("project", "add", "No prio")
+			projects := h.env.Store.LoadProjects()
+			last := projects[len(projects)-1]
+			if last.Priority.String() != "-" {
+				t.Errorf("Priority = %v, want none", last.Priority)
+			}
+		})
+
+		t.Run("the priority subcommand changes it", func(t *testing.T) {
+			if code := h.run("project", "priority", lowID, "high"); code != exitOK {
+				t.Fatalf("exit code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "Low prio priority: high") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			project, _ := h.env.Store.LoadProjects().Find(lowID)
+			if project.Priority.String() != "high" {
+				t.Errorf("Priority = %v, want high", project.Priority)
+			}
+			h.run("project", "priority", lowID, "low") // put it back
+		})
+
+		t.Run("the priority subcommand rejects a bad level", func(t *testing.T) {
+			if code := h.run("project", "priority", lowID, "urgent"); code == exitOK {
+				t.Error("expected a non-zero exit code")
+			}
+		})
+
+		t.Run("list shows the priority column and sorts siblings by it", func(t *testing.T) {
+			h.run("project", "list")
+			out := h.stdout()
+			if !strings.Contains(out, "high") || !strings.Contains(out, "low") {
+				t.Errorf("output should show priorities:\n%s", out)
+			}
+			if strings.Index(out, "High prio") > strings.Index(out, "Low prio") {
+				t.Errorf("high priority should list before low:\n%s", out)
+			}
+		})
+
+		t.Run("list with a level filters to a flat, path-qualified view", func(t *testing.T) {
+			h.run("project", "list", "high")
+			out := h.stdout()
+			if !strings.Contains(out, "High prio") || strings.Contains(out, "Low prio") {
+				t.Errorf("output should contain only the high project:\n%s", out)
+			}
+			if !strings.Contains(out, "2026-09-30") {
+				t.Errorf("output should show the due date:\n%s", out)
+			}
+		})
+
+		t.Run("list with a level reports when nothing matches", func(t *testing.T) {
+			h.run("project", "list", "medium")
+			if !strings.Contains(h.stdout(), "No projects at that priority.") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+
+		h.run("project", "rm", lowID)
+		h.run("project", "rm", highID)
+	})
+
 	t.Run("argument errors", func(t *testing.T) {
 		cases := [][]string{
 			{"project"},
@@ -705,9 +782,14 @@ func TestProjectCommands(t *testing.T) {
 			{"project", "add", "   "},
 			{"project", "add", "P", "not-a-date"},
 			{"project", "add", "P", "-", "no-such-project"},
+			{"project", "add", "P", "-", "-", "urgent"},
+			{"project", "list", "urgent"},
 			{"project", "parent"},
 			{"project", "parent", "no-such-project", "-"},
 			{"project", "parent", projectID, "no-such-project"},
+			{"project", "priority"},
+			{"project", "priority", "no-such-project", "high"},
+			{"project", "priority", "no-such-project"},
 			{"project", "done"},
 			{"project", "done", "no-such-project"},
 			{"project", "hold"},
@@ -1182,6 +1264,9 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"project add":    func(map[string]string) []string { return []string{"project", "add", "New"} },
 		"project parent": func(i map[string]string) []string { return []string{"project", "parent", i["project"], "-"} },
 		"project done":   func(i map[string]string) []string { return []string{"project", "done", i["project"]} },
+		"project priority": func(i map[string]string) []string {
+			return []string{"project", "priority", i["project"], "high"}
+		},
 		"project hold":   func(i map[string]string) []string { return []string{"project", "hold", i["project"]} },
 		"project reopen": func(i map[string]string) []string { return []string{"project", "reopen", i["project"]} },
 		"project rm":     func(i map[string]string) []string { return []string{"project", "rm", i["project"]} },
