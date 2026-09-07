@@ -163,6 +163,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Verified against the real binary under Xvfb: seeded tasks via the
   CLI with priorities and tags, then confirmed both filter controls
   narrow the GUI list correctly.
+- **Config file for start defaults.** `pomodoro config` shows the
+  current default work/rest minutes for `start`; `pomodoro config set
+  <work> <rest>` changes and persists them to a new `config.json` in
+  the data directory. `start`'s `-work`/`-rest` flags still override
+  whichever default is in effect. A missing or corrupt config file, or
+  an individual field that is zero or negative, falls back to the
+  historical 25/5 defaults — the same tolerance every other stored
+  file already has for a damaged read.
 
 ### Fixed
 
