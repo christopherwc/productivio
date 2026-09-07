@@ -102,6 +102,9 @@ pomodoro task list -tag home             # only tasks tagged "home"
 pomodoro task clear                      # delete every completed task
 pomodoro start -task <task-id>           # 25/5 by default
 pomodoro habit add "Review inbox" weekdays
+pomodoro habit add "Meditate" daily "morning,wellness"   # tags
+pomodoro habit tag <habit-id> morning,wellness   # replace tags, or - to clear
+pomodoro habit list -tag morning         # only habits tagged "morning"
 pomodoro habit check <habit-id>
 pomodoro history 20
 pomodoro report                          # focus time by project, last 7 days
@@ -160,6 +163,11 @@ keeping their list order), alongside each habit's longest streak on
 record and its completion rate over a trailing window (30 days by
 default) — the same per-habit figures `habit list` shows, but sorted so
 the habit most in need of attention is easy to spot.
+
+A habit can also carry freeform tags, the same as a task — set on
+`habit add` or replaced wholesale with `habit tag <id> <tags|->` (`-`
+clears them). `habit list -tag <tag>` filters the list to habits
+carrying it.
 
 ## How progress is measured
 

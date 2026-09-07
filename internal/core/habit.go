@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Weekday sets, using Monday as 0 through Sunday as 6 — the convention
@@ -50,6 +51,7 @@ type Habit struct {
 	Days        []int    `json:"days"`
 	Completions []string `json:"completions"` // ISO dates, sorted
 	Created     Date     `json:"created"`
+	Tags        []string `json:"tags"` // freeform labels, never nil; see Task.Tags
 }
 
 // Habits is the ordered habit list.
@@ -71,6 +73,7 @@ func NewHabit(name string, days []int, created Date) (*Habit, error) {
 		Days:        NormalizeDays(days),
 		Completions: []string{},
 		Created:     created,
+		Tags:        []string{},
 	}, nil
 }
 
@@ -134,6 +137,11 @@ func (h *Habit) normalize() {
 		if h.Created.IsZero() {
 			h.Created = Today()
 		}
+	}
+
+	h.Tags = cleanTags(h.Tags)
+	if h.Tags == nil {
+		h.Tags = []string{}
 	}
 }
 
@@ -320,6 +328,18 @@ func (h *Habit) ScheduleLabel() string {
 	return joinWith(names, ", ")
 }
 
+// HasTag reports whether the habit carries a tag, compared
+// case-insensitively so "Morning" and "morning" are the same tag.
+func (h *Habit) HasTag(tag string) bool {
+	target := strings.ToLower(strings.TrimSpace(tag))
+	for _, tg := range h.Tags {
+		if strings.ToLower(tg) == target {
+			return true
+		}
+	}
+	return false
+}
+
 // Find returns the habit with the given id.
 func (hs Habits) Find(id string) (*Habit, error) {
 	for _, h := range hs {
@@ -359,6 +379,17 @@ func (hs Habits) Move(id string, delta int) (int, error) {
 			copyShift(hs, from, to)
 			hs[to] = item
 		})
+}
+
+// WithTag returns the habits carrying a tag, in list order.
+func (hs Habits) WithTag(tag string) Habits {
+	var out Habits
+	for _, h := range hs {
+		if h.HasTag(tag) {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // ByCurrentStreak returns a copy of the habits ordered by longest
