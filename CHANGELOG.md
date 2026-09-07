@@ -136,6 +136,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seen), and always stored as a plain JSON array rather than `null`,
   matching the rest of the model's hand-editable format. `task list
   -tag <tag>` filters the list to tasks carrying it.
+- **Project priorities.** Mirrors task priorities: a project can carry
+  a priority via `project add`'s new optional argument or `pomodoro
+  project priority <id> <level>`. `project list` sorts each sibling
+  group highest priority first via a new `Projects.ByPriority`,
+  without disturbing the tree's parent/child shape, and an optional
+  level argument switches to a flat, path-qualified view of just the
+  projects at that priority (`Projects.WithPriority`) — a tree layout
+  does not make sense once projects and their ancestors are filtered
+  independently.
 
 ### Fixed
 
