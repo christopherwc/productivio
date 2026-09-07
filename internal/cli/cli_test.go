@@ -857,6 +857,83 @@ func TestHabitCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("tags", func(t *testing.T) {
+		h.run("habit", "add", "Morning run", "daily", "morning, fitness")
+		runID := h.env.Store.LoadHabits()[len(h.env.Store.LoadHabits())-1].ID
+		h.run("habit", "add", "Stretch", "daily", "fitness")
+		stretchID := h.env.Store.LoadHabits()[len(h.env.Store.LoadHabits())-1].ID
+
+		t.Run("add sets cleaned tags", func(t *testing.T) {
+			habit, _ := h.env.Store.LoadHabits().Find(runID)
+			if !habit.HasTag("morning") || !habit.HasTag("fitness") {
+				t.Errorf("Tags = %v", habit.Tags)
+			}
+		})
+
+		t.Run("add defaults to no tags", func(t *testing.T) {
+			h.run("habit", "add", "No tags")
+			habits := h.env.Store.LoadHabits()
+			last := habits[len(habits)-1]
+			if len(last.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", last.Tags)
+			}
+		})
+
+		t.Run("add treats an explicit - as no tags", func(t *testing.T) {
+			h.run("habit", "add", "Dash tags", "daily", "-")
+			habits := h.env.Store.LoadHabits()
+			last := habits[len(habits)-1]
+			if len(last.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", last.Tags)
+			}
+		})
+
+		t.Run("the tag subcommand replaces the tag list", func(t *testing.T) {
+			if code := h.run("habit", "tag", stretchID, "wellness"); code != exitOK {
+				t.Fatalf("exit code = %d: %s", code, h.stderr())
+			}
+			if !strings.Contains(h.stdout(), "Stretch tags: wellness") {
+				t.Errorf("output = %q", h.stdout())
+			}
+			habit, _ := h.env.Store.LoadHabits().Find(stretchID)
+			if !habit.HasTag("wellness") || habit.HasTag("fitness") {
+				t.Errorf("Tags = %v, want just wellness", habit.Tags)
+			}
+			h.run("habit", "tag", stretchID, "fitness") // put it back
+		})
+
+		t.Run("the tag subcommand clears tags with -", func(t *testing.T) {
+			h.run("habit", "tag", runID, "-")
+			habit, _ := h.env.Store.LoadHabits().Find(runID)
+			if len(habit.Tags) != 0 {
+				t.Errorf("Tags = %v, want none", habit.Tags)
+			}
+			h.run("habit", "tag", runID, "morning, fitness") // put it back
+		})
+
+		t.Run("list shows the tags column", func(t *testing.T) {
+			h.run("habit", "list")
+			if !strings.Contains(h.stdout(), "fitness") {
+				t.Errorf("output should show tags:\n%s", h.stdout())
+			}
+		})
+
+		t.Run("list -tag filters to habits carrying a tag", func(t *testing.T) {
+			h.run("habit", "list", "-tag", "morning")
+			out := h.stdout()
+			if !strings.Contains(out, "Morning run") || strings.Contains(out, "Stretch") {
+				t.Errorf("output should contain only the morning habit:\n%s", out)
+			}
+		})
+
+		t.Run("list -tag reports when nothing matches", func(t *testing.T) {
+			h.run("habit", "list", "-tag", "nope")
+			if !strings.Contains(h.stdout(), "No habits with that tag.") {
+				t.Errorf("output = %q", h.stdout())
+			}
+		})
+	})
+
 	t.Run("argument errors", func(t *testing.T) {
 		cases := [][]string{
 			{"habit"},
@@ -864,6 +941,11 @@ func TestHabitCommands(t *testing.T) {
 			{"habit", "add"},
 			{"habit", "add", "  "},
 			{"habit", "add", "H", "fortnightly"},
+			{"habit", "list", "urgent"},
+			{"habit", "list", "-tag"},
+			{"habit", "tag"},
+			{"habit", "tag", "no-such-habit", "urgent"},
+			{"habit", "tag", "no-such-habit"},
 			{"habit", "check"},
 			{"habit", "check", "no-such-habit"},
 		}
@@ -1271,6 +1353,7 @@ func TestSaveFailuresSurface(t *testing.T) {
 		"project reopen": func(i map[string]string) []string { return []string{"project", "reopen", i["project"]} },
 		"project rm":     func(i map[string]string) []string { return []string{"project", "rm", i["project"]} },
 		"habit add":      func(map[string]string) []string { return []string{"habit", "add", "New"} },
+		"habit tag":      func(i map[string]string) []string { return []string{"habit", "tag", i["habit"], "urgent"} },
 		"habit check":    func(i map[string]string) []string { return []string{"habit", "check", i["habit"]} },
 		"start":          func(map[string]string) []string { return []string{"start", "-work", "1", "-rest", "1"} },
 		"start -task": func(i map[string]string) []string {
