@@ -84,11 +84,11 @@ func NewHabitsTab(env *app.Env) fyne.CanvasObject {
 		row[habitRowLabel].(*widget.Label).SetText(habitRowText(h, today))
 
 		row[habitRowUp].(*widget.Button).OnTapped = func() {
-			habits.Move(h.ID, -1)
+			_, _ = habits.Move(h.ID, -1)
 			save()
 		}
 		row[habitRowDown].(*widget.Button).OnTapped = func() {
-			habits.Move(h.ID, 1)
+			_, _ = habits.Move(h.ID, 1)
 			save()
 		}
 		row[habitRowDelete].(*widget.Button).OnTapped = func() {

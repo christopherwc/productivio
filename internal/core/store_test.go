@@ -646,7 +646,7 @@ func TestTaskTags(t *testing.T) {
 	t.Run("round-trips through JSON as a plain array", func(t *testing.T) {
 		task := mustTask(t, "T", 1, "")
 		task.Tags = []string{"Urgent", "home"}
-		var tasks Tasks = Tasks{task}
+		tasks := Tasks{task}
 
 		store := newTestStore(t)
 		if err := store.SaveTasks(tasks); err != nil {
@@ -726,7 +726,7 @@ func TestTaskPriority(t *testing.T) {
 	t.Run("round-trips through JSON by name", func(t *testing.T) {
 		task := mustTask(t, "T", 1, "")
 		task.Priority = PriorityHigh
-		var tasks Tasks = Tasks{task}
+		tasks := Tasks{task}
 
 		store := newTestStore(t)
 		if err := store.SaveTasks(tasks); err != nil {

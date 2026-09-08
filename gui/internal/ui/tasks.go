@@ -137,11 +137,11 @@ func NewTasksTab(env *app.Env) fyne.CanvasObject {
 		row[taskRowLabel].(*widget.Label).SetText(taskRowText(task, projects, env.Today()))
 
 		row[taskRowUp].(*widget.Button).OnTapped = func() {
-			tasks.Move(task.ID, -1)
+			_, _ = tasks.Move(task.ID, -1)
 			save()
 		}
 		row[taskRowDown].(*widget.Button).OnTapped = func() {
-			tasks.Move(task.ID, 1)
+			_, _ = tasks.Move(task.ID, 1)
 			save()
 		}
 		row[taskRowDelete].(*widget.Button).OnTapped = func() {

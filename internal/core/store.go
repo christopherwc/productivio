@@ -109,8 +109,8 @@ func (s *Store) writeJSON(name string, v any) error {
 	// From here on, any failure must remove the temp file so a failed
 	// save does not litter the data directory.
 	cleanup := func(cause error) error {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return cause
 	}
 
@@ -130,7 +130,7 @@ func (s *Store) writeJSON(name string, v any) error {
 		return cleanup(fmt.Errorf("core: closing %s: %w", name, err))
 	}
 	if err := renameFile(tmpName, s.Path(name)); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("core: replacing %s: %w", name, err)
 	}
 	return nil
