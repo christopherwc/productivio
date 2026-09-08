@@ -174,6 +174,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Unchecked errors on reorder buttons and save cleanup.** A repo-wide
+  audit against `gofmt -s`, `go vet` and `staticcheck` (all clean —
+  `make check` was already passing) also ran `golangci-lint` for a
+  second opinion, which caught what those three don't check for:
+  `gui/internal/ui`'s task/habit list rows called `Move` from their
+  Up/Down buttons without checking its `(int, error)` return, and
+  `internal/core/store.go`'s save-cleanup path did the same for the
+  temp file's `Close`/`Remove` after a failed write. Neither error can
+  fire today, but both are now explicit `_, _ =` / `_ =` discards,
+  matching the project's existing convention (`cli.go`'s `SetParent`
+  call) for intentionally-ignored errors instead of a bare unchecked
+  call. Also fixed two redundant type declarations in
+  `store_test.go` (`ST1023`, outside staticcheck's default checks).
+  Left alone: `golangci-lint` additionally flags ~70 unchecked
+  `fmt.Fprint*` calls in `internal/cli/cli.go` writing to stdout/stderr
+  and a couple of deliberate/inconsequential discards in
+  `store_test.go`'s fault-injection tests — both are standard, accepted
+  Go idiom rather than real defects, so silencing them would just be
+  lint-appeasement noise.
 - **GUI layout overflow.** Built and ran the actual `pomodoro-gui`
   binary for the first time this session (previously verified only via
   headless widget tests and CI's build-only job) — under Xvfb, with
