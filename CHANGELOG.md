@@ -181,6 +181,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an individual field that is zero or negative, falls back to the
   historical 25/5 defaults — the same tolerance every other stored
   file already has for a damaged read.
+- **Arch Linux packaging.** PKGBUILDs for the CLI (`productivio`,
+  installing a `pomodoro` binary) and the Fyne GUI (`productivio-gui`,
+  installing `pomodoro-gui` plus a `.desktop` entry) under
+  `packaging/archlinux/`, building from the tagged release tarball
+  rather than `-git` HEAD. Named `productivio` rather than `pomodoro`
+  on the AUR because `pomodoro` is already taken by an unrelated
+  package. Not yet published to the AUR — see
+  `packaging/archlinux/README.md` for the local build/test steps and
+  what publishing still requires.
 
 ### Fixed
 

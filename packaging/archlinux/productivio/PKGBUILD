@@ -1,0 +1,32 @@
+# Maintainer: christopherwc <chriscap3@outlook.com>
+pkgname=productivio
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A focus timer with tasks, habits and project tracking (CLI)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/christopherwc/productivio"
+license=('MIT')
+makedepends=('go')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/christopherwc/productivio/archive/refs/tags/v$pkgver.tar.gz")
+# Run `updpkgsums` after v$pkgver is pushed to origin to fill this in.
+sha256sums=('SKIP')
+
+build() {
+	cd "productivio-$pkgver"
+	export CGO_ENABLED=0
+	export GOFLAGS='-buildmode=pie -trimpath -mod=readonly -modcacherw'
+	go build -ldflags "-s -w -X github.com/christopherwc/productivio/internal/cli.Version=v$pkgver" \
+		-o pomodoro ./cmd/pomodoro
+}
+
+check() {
+	cd "productivio-$pkgver"
+	go test ./...
+}
+
+package() {
+	cd "productivio-$pkgver"
+	install -Dm755 pomodoro "$pkgdir/usr/bin/pomodoro"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

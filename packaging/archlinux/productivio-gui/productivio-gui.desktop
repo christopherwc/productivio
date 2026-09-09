@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Pomodoro
+Comment=A focus timer with tasks, habits and project tracking
+Exec=pomodoro-gui
+Terminal=false
+Categories=Utility;Office;
