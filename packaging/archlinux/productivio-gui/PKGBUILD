@@ -1,0 +1,42 @@
+# Maintainer: christopherwc <chriscap3@outlook.com>
+pkgname=productivio-gui
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A focus timer with tasks, habits and project tracking (Fyne GUI)"
+arch=('x86_64')
+url="https://github.com/christopherwc/productivio"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'libx11' 'libxcursor' 'libxrandr' 'libxinerama'
+         'libxi' 'libxxf86vm' 'libxkbcommon' 'mesa' 'fontconfig')
+makedepends=('go' 'git')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/christopherwc/productivio/archive/refs/tags/v$pkgver.tar.gz"
+        "$pkgname.desktop")
+# Run `updpkgsums` after v$pkgver is pushed to origin to fill the first hash in;
+# the second is the local .desktop file above and is already correct.
+sha256sums=('SKIP'
+            'b566640a62433bb73b3a7a6a5c17700237b818893a3e3e161889267285b4f888')
+
+prepare() {
+	cd "productivio-$pkgver/gui"
+	export GOFLAGS='-mod=readonly -modcacherw'
+	go mod download
+}
+
+build() {
+	cd "productivio-$pkgver/gui"
+	export CGO_ENABLED=1
+	export GOFLAGS='-buildmode=pie -trimpath -mod=readonly -modcacherw'
+	go build -ldflags "-s -w" -o pomodoro-gui ./cmd/pomodoro-gui
+}
+
+check() {
+	cd "productivio-$pkgver/gui"
+	go test ./...
+}
+
+package() {
+	cd "productivio-$pkgver"
+	install -Dm755 "gui/pomodoro-gui" "$pkgdir/usr/bin/pomodoro-gui"
+	install -Dm644 "$srcdir/$pkgname.desktop" "$pkgdir/usr/share/applications/pomodoro-gui.desktop"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

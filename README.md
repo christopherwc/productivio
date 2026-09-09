@@ -78,6 +78,14 @@ Cross-compiling needs no toolchain setup, because there is no cgo:
 make release     # binaries for darwin/arm64, darwin/amd64, linux/amd64, linux/arm64
 ```
 
+### Arch Linux
+
+PKGBUILDs for both the CLI (AUR name `productivio`) and the GUI (AUR name
+`productivio-gui`) live in
+[`packaging/archlinux/`](packaging/archlinux/README.md). They aren't on the
+AUR yet; until then, build and install locally with `makepkg -si` from
+either package's directory.
+
 ## Use
 
 ```bash
