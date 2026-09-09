@@ -549,6 +549,20 @@ func TestProjectSummaryAndPortfolio(t *testing.T) {
 			t.Errorf("got (%d, %d, %d), want (2, 1, 1)", active, completed, needAttention)
 		}
 	})
+
+	t.Run("PortfolioStats excludes deleted projects", func(t *testing.T) {
+		local := Projects{}
+		if _, err := local.Add("Active", "", Date{}, fixedToday); err != nil {
+			t.Fatal(err)
+		}
+		late, _ := local.Add("Late", "", NewDate(2026, time.August, 1), NewDate(2026, time.July, 1))
+		local.Delete(late.ID)
+
+		active, completed, needAttention := local.PortfolioStats(nil, fixedToday)
+		if active != 1 || completed != 0 || needAttention != 0 {
+			t.Errorf("got (%d, %d, %d), want (1, 0, 0)", active, completed, needAttention)
+		}
+	})
 }
 
 func TestProjectHierarchy(t *testing.T) {

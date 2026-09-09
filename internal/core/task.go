@@ -98,17 +98,19 @@ func (p *Priority) UnmarshalJSON(data []byte) error {
 
 // Task is one item on the TODO list.
 type Task struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Done        bool      `json:"done"`
-	Estimate    int       `json:"estimate"`  // planned pomodoros
-	Completed   int       `json:"completed"` // pomodoros actually finished
-	Created     Timestamp `json:"created"`
-	CompletedAt *string   `json:"completed_at"`
-	ProjectID   string    `json:"project_id"` // owning project, or empty
-	Due         Date      `json:"due"`        // deadline, or the zero Date for none
-	Priority    Priority  `json:"priority"`   // urgency, or PriorityNone for unset
-	Tags        []string  `json:"tags"`       // freeform labels, never nil
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Done        bool       `json:"done"`
+	Estimate    int        `json:"estimate"`  // planned pomodoros
+	Completed   int        `json:"completed"` // pomodoros actually finished
+	Created     Timestamp  `json:"created"`
+	CompletedAt *string    `json:"completed_at"`
+	ProjectID   string     `json:"project_id"`           // owning project, or empty
+	Due         Date       `json:"due"`                  // deadline, or the zero Date for none
+	Priority    Priority   `json:"priority"`             // urgency, or PriorityNone for unset
+	Tags        []string   `json:"tags"`                 // freeform labels, never nil
+	UpdatedAt   time.Time  `json:"updated_at"`           // last content change; Store.SaveTasks stamps this
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"` // tombstone; nil means live. See Tasks.Delete.
 }
 
 // ParseTags splits a comma-separated list into cleaned tags. "" and
@@ -190,6 +192,9 @@ func (t *Task) normalize() {
 	if t.Created.Time().IsZero() {
 		t.Created = Timestamp(time.Now())
 	}
+	if t.UpdatedAt.IsZero() {
+		t.UpdatedAt = t.Created.Time()
+	}
 	t.Tags = cleanTags(t.Tags)
 	if t.Tags == nil {
 		t.Tags = []string{}
@@ -254,10 +259,11 @@ func (t *Task) HasTag(tag string) bool {
 	return false
 }
 
-// Find returns the task with the given id.
+// Find returns the task with the given id. A tombstoned task is treated
+// as not found, matching how deletion behaved before tombstones existed.
 func (ts Tasks) Find(id string) (*Task, error) {
 	for _, t := range ts {
-		if t.ID == id {
+		if t.ID == id && t.DeletedAt == nil {
 			return t, nil
 		}
 	}
@@ -274,14 +280,20 @@ func (ts *Tasks) Add(title string, estimate int, projectID string) (*Task, error
 	return task, nil
 }
 
-// Delete removes a task, reporting whether anything was removed.
+// Delete tombstones a task, reporting whether anything was removed. It
+// stays in the slice with DeletedAt set rather than being spliced out,
+// so a sync can propagate the deletion to another device instead of
+// silently resurrecting the task on the next merge; every listing
+// method below hides tombstoned tasks so this is invisible to a caller
+// that never syncs.
 //
 // Sessions that referenced it keep their copy of the title, so history
 // is never corrupted by a deletion.
 func (ts *Tasks) Delete(id string) bool {
-	for i, t := range *ts {
-		if t.ID == id {
-			*ts = append((*ts)[:i], (*ts)[i+1:]...)
+	for _, t := range *ts {
+		if t.ID == id && t.DeletedAt == nil {
+			now := time.Now()
+			t.DeletedAt = &now
 			return true
 		}
 	}
@@ -291,7 +303,7 @@ func (ts *Tasks) Delete(id string) bool {
 // Move reorders a task by delta positions (-1 up, +1 down), clamping at
 // the ends of the list rather than wrapping. Returns the new index.
 func (ts Tasks) Move(id string, delta int) (int, error) {
-	return move(ts, delta, func(i int) bool { return ts[i].ID == id },
+	return move(ts, delta, func(i int) bool { return ts[i].ID == id && ts[i].DeletedAt == nil },
 		func(from, to int) {
 			item := ts[from]
 			copyShift(ts, from, to)
@@ -299,35 +311,37 @@ func (ts Tasks) Move(id string, delta int) (int, error) {
 		})
 }
 
-// ClearCompleted removes every finished task, reporting how many went.
+// ClearCompleted tombstones every finished task, reporting how many
+// went. Like Delete, this marks rather than splices, for the same
+// sync-propagation reason.
 func (ts *Tasks) ClearCompleted() int {
-	kept := make(Tasks, 0, len(*ts))
+	removed := 0
 	for _, t := range *ts {
-		if !t.Done {
-			kept = append(kept, t)
+		if t.Done && t.DeletedAt == nil {
+			now := time.Now()
+			t.DeletedAt = &now
+			removed++
 		}
 	}
-	removed := len(*ts) - len(kept)
-	*ts = kept
 	return removed
 }
 
-// Open returns the unfinished tasks, in list order.
+// Open returns the unfinished, non-deleted tasks, in list order.
 func (ts Tasks) Open() Tasks {
 	var out Tasks
 	for _, t := range ts {
-		if !t.Done {
+		if !t.Done && t.DeletedAt == nil {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-// ForProject returns every task filed under a project.
+// ForProject returns every non-deleted task filed under a project.
 func (ts Tasks) ForProject(projectID string) Tasks {
 	var out Tasks
 	for _, t := range ts {
-		if t.ProjectID == projectID {
+		if t.ProjectID == projectID && t.DeletedAt == nil {
 			out = append(out, t)
 		}
 	}
@@ -337,21 +351,22 @@ func (ts Tasks) ForProject(projectID string) Tasks {
 // Unfiled returns the tasks not belonging to any project.
 func (ts Tasks) Unfiled() Tasks { return ts.ForProject("") }
 
-// WithPriority returns the tasks at exactly the given priority level,
-// in list order.
+// WithPriority returns the non-deleted tasks at exactly the given
+// priority level, in list order.
 func (ts Tasks) WithPriority(p Priority) Tasks {
 	var out Tasks
 	for _, t := range ts {
-		if t.Priority == p {
+		if t.Priority == p && t.DeletedAt == nil {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-// Search returns the tasks whose title contains the query, matched
-// case-insensitively, in list order. A blank query matches nothing,
-// since "every task" is what Open or the unfiltered list is for.
+// Search returns the non-deleted tasks whose title contains the query,
+// matched case-insensitively, in list order. A blank query matches
+// nothing, since "every task" is what Open or the unfiltered list is
+// for.
 func (ts Tasks) Search(query string) Tasks {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -359,30 +374,34 @@ func (ts Tasks) Search(query string) Tasks {
 	}
 	var out Tasks
 	for _, t := range ts {
-		if strings.Contains(strings.ToLower(t.Title), q) {
+		if t.DeletedAt == nil && strings.Contains(strings.ToLower(t.Title), q) {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-// WithTag returns the tasks carrying a tag, in list order.
+// WithTag returns the non-deleted tasks carrying a tag, in list order.
 func (ts Tasks) WithTag(tag string) Tasks {
 	var out Tasks
 	for _, t := range ts {
-		if t.HasTag(tag) {
+		if t.DeletedAt == nil && t.HasTag(tag) {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
-// ByPriority returns a copy of the tasks ordered highest priority
+// ByPriority returns the non-deleted tasks ordered highest priority
 // first. Equal priorities keep their relative list order, so `task
 // list` stays predictable rather than shuffling tasks that tie.
 func (ts Tasks) ByPriority() Tasks {
-	out := make(Tasks, len(ts))
-	copy(out, ts)
+	out := make(Tasks, 0, len(ts))
+	for _, t := range ts {
+		if t.DeletedAt == nil {
+			out = append(out, t)
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority > out[j].Priority })
 	return out
 }
@@ -396,7 +415,7 @@ func (ts Tasks) ByPriority() Tasks {
 func (ts Tasks) DetachFromProject(projectID string) int {
 	moved := 0
 	for _, t := range ts {
-		if t.ProjectID == projectID {
+		if t.ProjectID == projectID && t.DeletedAt == nil {
 			t.ProjectID = ""
 			moved++
 		}
@@ -406,9 +425,12 @@ func (ts Tasks) DetachFromProject(projectID string) int {
 
 // TaskStats reports the open and finished counts, the estimated
 // pomodoros still outstanding across the open tasks, and how many open
-// tasks are overdue.
+// tasks are overdue. Tombstoned tasks count toward none of these.
 func (ts Tasks) TaskStats(today Date) (open, done, remaining, overdue int) {
 	for _, t := range ts {
+		if t.DeletedAt != nil {
+			continue
+		}
 		if t.Done {
 			done++
 			continue

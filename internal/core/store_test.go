@@ -43,6 +43,144 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSaveStampsUpdatedAt covers Store's diff-on-save stamping: a
+// record's UpdatedAt should move only when its content actually
+// changes since what is on disk, regardless of whether the change came
+// through a method or, as internal/cli sometimes does, a direct field
+// assignment.
+func TestSaveStampsUpdatedAt(t *testing.T) {
+	store := newTestStore(t)
+
+	var tasks Tasks
+	a, err := tasks.Add("Write the report", 3, "")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := store.SaveTasks(tasks); err != nil {
+		t.Fatalf("SaveTasks: %v", err)
+	}
+	first, err := store.LoadTasks().Find(a.ID)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if first.UpdatedAt.IsZero() {
+		t.Fatal("a newly saved task should get a stamped UpdatedAt")
+	}
+
+	t.Run("re-saving unchanged content leaves the timestamp alone", func(t *testing.T) {
+		reloaded := store.LoadTasks()
+		if err := store.SaveTasks(reloaded); err != nil {
+			t.Fatalf("SaveTasks: %v", err)
+		}
+		again, err := store.LoadTasks().Find(a.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !again.UpdatedAt.Equal(first.UpdatedAt) {
+			t.Errorf("UpdatedAt moved from %v to %v with no content change", first.UpdatedAt, again.UpdatedAt)
+		}
+	})
+
+	t.Run("a direct field edit, bypassing any method, still bumps the timestamp", func(t *testing.T) {
+		edited := store.LoadTasks()
+		task, err := edited.Find(a.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		task.Due = NewDate(2026, time.October, 1) // mirrors cli.go's task edit, which sets fields directly
+		if err := store.SaveTasks(edited); err != nil {
+			t.Fatalf("SaveTasks: %v", err)
+		}
+		changed, err := store.LoadTasks().Find(a.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !changed.UpdatedAt.After(first.UpdatedAt) {
+			t.Errorf("UpdatedAt did not move forward after a direct field edit: %v -> %v", first.UpdatedAt, changed.UpdatedAt)
+		}
+	})
+
+	t.Run("SaveHabits stamps the same way", func(t *testing.T) {
+		var habits Habits
+		h, _ := habits.Add("Meditate", Daily, fixedToday)
+		if err := store.SaveHabits(habits); err != nil {
+			t.Fatalf("SaveHabits: %v", err)
+		}
+		stamped, err := store.LoadHabits().Find(h.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if stamped.UpdatedAt.IsZero() {
+			t.Error("a newly saved habit should get a stamped UpdatedAt")
+		}
+
+		unchanged := store.LoadHabits()
+		if err := store.SaveHabits(unchanged); err != nil {
+			t.Fatalf("SaveHabits: %v", err)
+		}
+		again, err := store.LoadHabits().Find(h.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !again.UpdatedAt.Equal(stamped.UpdatedAt) {
+			t.Errorf("UpdatedAt moved with no content change: %v -> %v", stamped.UpdatedAt, again.UpdatedAt)
+		}
+
+		list := store.LoadHabits()
+		list[0].Tags = []string{"morning"} // direct field edit, mirroring cli.go
+		if err := store.SaveHabits(list); err != nil {
+			t.Fatalf("SaveHabits: %v", err)
+		}
+		final, err := store.LoadHabits().Find(h.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !final.UpdatedAt.After(stamped.UpdatedAt) {
+			t.Errorf("UpdatedAt did not move forward after a direct field edit: %v -> %v", stamped.UpdatedAt, final.UpdatedAt)
+		}
+	})
+
+	t.Run("SaveProjects stamps the same way", func(t *testing.T) {
+		var projects Projects
+		p, _ := projects.Add("Website", "", Date{}, fixedToday)
+		if err := store.SaveProjects(projects); err != nil {
+			t.Fatalf("SaveProjects: %v", err)
+		}
+		stamped, err := store.LoadProjects().Find(p.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if stamped.UpdatedAt.IsZero() {
+			t.Error("a newly saved project should get a stamped UpdatedAt")
+		}
+
+		unchanged := store.LoadProjects()
+		if err := store.SaveProjects(unchanged); err != nil {
+			t.Fatalf("SaveProjects: %v", err)
+		}
+		again, err := store.LoadProjects().Find(p.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !again.UpdatedAt.Equal(stamped.UpdatedAt) {
+			t.Errorf("UpdatedAt moved with no content change: %v -> %v", stamped.UpdatedAt, again.UpdatedAt)
+		}
+
+		list := store.LoadProjects()
+		list[0].Priority = PriorityHigh // direct field edit, mirroring cli.go
+		if err := store.SaveProjects(list); err != nil {
+			t.Fatalf("SaveProjects: %v", err)
+		}
+		final, err := store.LoadProjects().Find(p.ID)
+		if err != nil {
+			t.Fatalf("Find: %v", err)
+		}
+		if !final.UpdatedAt.After(stamped.UpdatedAt) {
+			t.Errorf("UpdatedAt did not move forward after a direct field edit: %v -> %v", stamped.UpdatedAt, final.UpdatedAt)
+		}
+	})
+}
+
 func TestConfig(t *testing.T) {
 	t.Run("a fresh store falls back to the defaults", func(t *testing.T) {
 		store := newTestStore(t)
@@ -267,6 +405,12 @@ func TestStoreLoadsPythonFiles(t *testing.T) {
 		task.Completed != 1 || task.ProjectID != "b2c3d4e5f6a1" {
 		t.Errorf("fields did not survive: %+v", task)
 	}
+	if task.UpdatedAt.IsZero() {
+		t.Error("a file with no updated_at should backfill one from Created, not leave it zero")
+	}
+	if task.DeletedAt != nil {
+		t.Error("a file with no deleted_at should load as live")
+	}
 
 	write(t, store.Path(HabitsFile), `[
   {
@@ -284,6 +428,29 @@ func TestStoreLoadsPythonFiles(t *testing.T) {
 	}
 	if habits[0].Created != NewDate(2026, time.August, 1) {
 		t.Errorf("Created = %v, want 2026-08-01", habits[0].Created)
+	}
+	if habits[0].UpdatedAt.IsZero() {
+		t.Error("a file with no updated_at should backfill one from Created, not leave it zero")
+	}
+
+	write(t, store.Path(ProjectsFile), `[
+  {
+    "id": "d4e5f6a1b2c3",
+    "name": "Website",
+    "description": "",
+    "status": "active",
+    "created": "2026-08-01",
+    "due": null,
+    "completed_at": null,
+    "parent_id": ""
+  }
+]`)
+	projects := store.LoadProjects()
+	if len(projects) != 1 || projects[0].Name != "Website" {
+		t.Fatalf("project did not survive: %+v", projects)
+	}
+	if projects[0].UpdatedAt.IsZero() {
+		t.Error("a file with no updated_at should backfill one from Created, not leave it zero")
 	}
 }
 
@@ -854,8 +1021,17 @@ func TestTaskOperations(t *testing.T) {
 		if got := titles(tasks); !equalStrings(got, []string{"Task A", "Task C"}) {
 			t.Errorf("after delete = %v", got)
 		}
+		if b.DeletedAt == nil {
+			t.Error("Delete should tombstone rather than remove")
+		}
+		if len(tasks) != 3 {
+			t.Errorf("len = %d, want 3 (tombstoned tasks stay in the slice)", len(tasks))
+		}
 		if tasks.Delete("nope") {
 			t.Error("deleting an unknown id should report false")
+		}
+		if tasks.Delete(b.ID) {
+			t.Error("deleting an already-deleted task should report false")
 		}
 	})
 
@@ -887,6 +1063,14 @@ func TestTaskOperations(t *testing.T) {
 		}
 		if _, err := tasks.Move("nope", 1); !errors.Is(err, ErrNotFound) {
 			t.Errorf("Move(unknown) error = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("Move treats a deleted task as not found", func(t *testing.T) {
+		tasks, _, b, _ := newList(t)
+		tasks.Delete(b.ID)
+		if _, err := tasks.Move(b.ID, 1); !errors.Is(err, ErrNotFound) {
+			t.Errorf("Move(deleted) error = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -927,6 +1111,17 @@ func TestTaskOperations(t *testing.T) {
 		open, done, remaining, overdue := tasks.TaskStats(fixedToday)
 		if open != 2 || done != 1 || remaining != 1+3 || overdue != 0 {
 			t.Errorf("got (%d, %d, %d, %d), want (2, 1, 4, 0)", open, done, remaining, overdue)
+		}
+	})
+
+	t.Run("TaskStats excludes deleted tasks", func(t *testing.T) {
+		tasks, a, _, c := newList(t)
+		a.Completed = 1 // remaining 1, out of an estimate of 2
+		c.SetDone(true)
+		tasks.Delete(c.ID) // was the only done task; deleting it should not count as "done"
+		open, done, remaining, overdue := tasks.TaskStats(fixedToday)
+		if open != 2 || done != 0 || remaining != 1+3 || overdue != 0 {
+			t.Errorf("got (%d, %d, %d, %d), want (2, 0, 4, 0)", open, done, remaining, overdue)
 		}
 	})
 
@@ -1049,10 +1244,14 @@ func mustProject(t *testing.T, name string) *Project {
 	return project
 }
 
+// titles reports the titles of the non-deleted tasks, in list order —
+// what a caller that never inspects DeletedAt directly would see.
 func titles(tasks Tasks) []string {
-	out := make([]string, len(tasks))
-	for i, t := range tasks {
-		out[i] = t.Title
+	var out []string
+	for _, t := range tasks {
+		if t.DeletedAt == nil {
+			out = append(out, t.Title)
+		}
 	}
 	return out
 }

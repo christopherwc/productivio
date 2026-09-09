@@ -1,12 +1,14 @@
 package core
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Data file names, unchanged from the Python implementation so an
@@ -163,6 +165,56 @@ func (s *Store) SaveSessions(sessions Sessions) error {
 	return s.writeJSON(SessionsFile, nonNil(sessions))
 }
 
+// stampUpdated sets UpdatedAt to now on any record that is new or whose
+// content changed since what's currently on disk, and leaves the
+// timestamp alone on a record whose content is unchanged.
+//
+// This runs once per Save call rather than in each mutator, because
+// mutators are not the only way a record changes: internal/cli edits
+// several fields directly (e.g. a task's due date or tags) rather than
+// through a method, and any such call site would otherwise have to
+// remember to stamp the timestamp itself. Comparing against what's on
+// disk — not what was loaded into memory — also means a long-lived
+// Store (as gui/ keeps for its whole session) does not need to track
+// state between Load and Save.
+func stampUpdated[T any](old []T, items []T, id func(T) string, hash func(T) [32]byte, setUpdatedAt func(T, time.Time), getUpdatedAt func(T) time.Time) {
+	oldByID := make(map[string]T, len(old))
+	for _, o := range old {
+		oldByID[id(o)] = o
+	}
+	now := time.Now()
+	for _, item := range items {
+		if o, ok := oldByID[id(item)]; ok && hash(o) == hash(item) {
+			setUpdatedAt(item, getUpdatedAt(o))
+			continue
+		}
+		setUpdatedAt(item, now)
+	}
+}
+
+// taskHash hashes a task's content, excluding UpdatedAt/DeletedAt, so
+// stampUpdated can tell a genuine edit from a re-save of the same data.
+func taskHash(t *Task) [32]byte {
+	c := *t
+	c.UpdatedAt, c.DeletedAt = time.Time{}, nil
+	data, _ := json.Marshal(c)
+	return sha256.Sum256(data)
+}
+
+func habitHash(h *Habit) [32]byte {
+	c := *h
+	c.UpdatedAt, c.DeletedAt = time.Time{}, nil
+	data, _ := json.Marshal(c)
+	return sha256.Sum256(data)
+}
+
+func projectHash(p *Project) [32]byte {
+	c := *p
+	c.UpdatedAt, c.DeletedAt = time.Time{}, nil
+	data, _ := json.Marshal(c)
+	return sha256.Sum256(data)
+}
+
 // LoadTasks reads the task list, repairing any incomplete records and
 // discarding entries with no id.
 func (s *Store) LoadTasks() Tasks {
@@ -171,8 +223,18 @@ func (s *Store) LoadTasks() Tasks {
 	return normalizeAll(tasks, func(t *Task) bool { return keep(t.ID, t.normalize) })
 }
 
-// SaveTasks persists the task list.
+// SaveTasks persists the task list, stamping UpdatedAt on whichever
+// tasks are new or changed since the file currently on disk. See
+// stampUpdated.
 func (s *Store) SaveTasks(tasks Tasks) error {
+	var old Tasks
+	s.readJSON(TasksFile, &old)
+	stampUpdated(old, tasks,
+		func(t *Task) string { return t.ID },
+		taskHash,
+		func(t *Task, at time.Time) { t.UpdatedAt = at },
+		func(t *Task) time.Time { return t.UpdatedAt },
+	)
 	return s.writeJSON(TasksFile, nonNil(tasks))
 }
 
@@ -183,8 +245,18 @@ func (s *Store) LoadHabits() Habits {
 	return normalizeAll(habits, func(h *Habit) bool { return keep(h.ID, h.normalize) })
 }
 
-// SaveHabits persists the habit list.
+// SaveHabits persists the habit list, stamping UpdatedAt on whichever
+// habits are new or changed since the file currently on disk. See
+// stampUpdated.
 func (s *Store) SaveHabits(habits Habits) error {
+	var old Habits
+	s.readJSON(HabitsFile, &old)
+	stampUpdated(old, habits,
+		func(h *Habit) string { return h.ID },
+		habitHash,
+		func(h *Habit, at time.Time) { h.UpdatedAt = at },
+		func(h *Habit) time.Time { return h.UpdatedAt },
+	)
 	return s.writeJSON(HabitsFile, nonNil(habits))
 }
 
@@ -198,8 +270,18 @@ func (s *Store) LoadProjects() Projects {
 	return projects
 }
 
-// SaveProjects persists the project list.
+// SaveProjects persists the project list, stamping UpdatedAt on
+// whichever projects are new or changed since the file currently on
+// disk. See stampUpdated.
 func (s *Store) SaveProjects(projects Projects) error {
+	var old Projects
+	s.readJSON(ProjectsFile, &old)
+	stampUpdated(old, projects,
+		func(p *Project) string { return p.ID },
+		projectHash,
+		func(p *Project, at time.Time) { p.UpdatedAt = at },
+		func(p *Project) time.Time { return p.UpdatedAt },
+	)
 	return s.writeJSON(ProjectsFile, nonNil(projects))
 }
 
