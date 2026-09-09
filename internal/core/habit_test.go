@@ -479,8 +479,17 @@ func TestHabitCollection(t *testing.T) {
 		if habits.Delete("nope") {
 			t.Error("deleting an unknown id should report false")
 		}
-		if len(habits) != 2 {
-			t.Errorf("len = %d, want 2", len(habits))
+		if habits.Delete(a.ID) {
+			t.Error("deleting an already-deleted habit should report false")
+		}
+		if a.DeletedAt == nil {
+			t.Error("Delete should tombstone rather than remove")
+		}
+		if _, err := habits.Find(a.ID); !errors.Is(err, ErrNotFound) {
+			t.Errorf("Find(deleted) error = %v, want ErrNotFound", err)
+		}
+		if len(habits) != 3 {
+			t.Errorf("len = %d, want 3 (tombstoned habits stay in the slice)", len(habits))
 		}
 	})
 }

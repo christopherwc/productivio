@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`core`** — sync-ready data model, the foundation for cross-device
+  sync. `Task`, `Habit` and `Project` now carry `UpdatedAt` and a
+  `DeletedAt` tombstone; `Store.SaveTasks`/`SaveHabits`/`SaveProjects`
+  stamp `UpdatedAt` on whichever records are new or changed since the
+  file on disk, so no call site — method or direct field edit — has to
+  remember to do it itself. `Delete` (and `Tasks.ClearCompleted`) now
+  tombstone rather than splice, invisibly to any caller that never
+  syncs; new `MergeTasks`/`MergeHabits`/`MergeProjects`/`MergeSessions`
+  functions combine two devices' collections with last-writer-wins per
+  record. No sync transport yet — this is the data model only.
 - **`gui/`** — scaffold for a native desktop GUI (Fyne), as a second,
   separate Go module so the CLI's zero-dependency/no-cgo/single-binary
   properties are unaffected. CI, `go.mod` tidiness, `go mod verify` and

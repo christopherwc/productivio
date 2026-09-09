@@ -450,27 +450,27 @@ func TestTaskCommands(t *testing.T) {
 
 	t.Run("rm deletes", func(t *testing.T) {
 		taskID := h.env.Store.LoadTasks()[0].ID
-		before := len(h.env.Store.LoadTasks())
 		h.run("task", "rm", taskID)
-		if got := len(h.env.Store.LoadTasks()); got != before-1 {
-			t.Errorf("tasks = %d, want %d", got, before-1)
+		tasks := h.env.Store.LoadTasks()
+		if _, err := tasks.Find(taskID); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("Find(deleted) error = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("clear removes only completed tasks", func(t *testing.T) {
-		tasks := h.env.Store.LoadTasks()
-		before := len(tasks)
-		h.run("task", "done", tasks[0].ID) // mark one done so clear has work to do
+		tasks := h.env.Store.LoadTasks().Open()
+		doneID := tasks[0].ID
+		h.run("task", "done", doneID) // mark one done so clear has work to do
 
 		h.run("task", "clear")
 		if !strings.Contains(h.stdout(), "Cleared 1 completed task(s).") {
 			t.Errorf("output = %q", h.stdout())
 		}
 		remaining := h.env.Store.LoadTasks()
-		if len(remaining) != before-1 {
-			t.Errorf("tasks = %d, want %d", len(remaining), before-1)
+		if _, err := remaining.Find(doneID); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("Find(cleared) error = %v, want ErrNotFound", err)
 		}
-		for _, task := range remaining {
+		for _, task := range remaining.Open() {
 			if task.Done {
 				t.Errorf("a done task survived clear: %+v", task)
 			}

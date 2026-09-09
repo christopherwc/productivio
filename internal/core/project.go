@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"sort"
+	"time"
 )
 
 // Project statuses.
@@ -39,15 +40,17 @@ const AtRiskSlip = 0.25
 // because every completed pomodoro already records which task it
 // served, focus time rolls up into project-level reporting.
 type Project struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Status      string   `json:"status"`
-	Created     Date     `json:"created"`
-	Due         Date     `json:"due"`
-	CompletedAt *string  `json:"completed_at"`
-	ParentID    string   `json:"parent_id"` // owning project, or empty for a top-level project
-	Priority    Priority `json:"priority"`  // urgency, or PriorityNone for unset; see Task.Priority
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	Created     Date       `json:"created"`
+	Due         Date       `json:"due"`
+	CompletedAt *string    `json:"completed_at"`
+	ParentID    string     `json:"parent_id"`            // owning project, or empty for a top-level project
+	Priority    Priority   `json:"priority"`             // urgency, or PriorityNone for unset; see Task.Priority
+	UpdatedAt   time.Time  `json:"updated_at"`           // last content change; Store.SaveProjects stamps this
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"` // tombstone; nil means live. See Projects.Delete.
 }
 
 // Projects is the ordered project list.
@@ -88,6 +91,9 @@ func (p *Project) normalize() {
 	}
 	if p.Created.IsZero() {
 		p.Created = Today()
+	}
+	if p.UpdatedAt.IsZero() {
+		p.UpdatedAt = p.Created.time()
 	}
 }
 
@@ -305,10 +311,13 @@ func (ps Projects) Summarize(p *Project, tasks Tasks, sessions Sessions, today D
 	}
 }
 
-// Find returns the project with the given id.
+// Find returns the project with the given id. A tombstoned project is
+// treated as not found, matching how deletion behaved before
+// tombstones existed; repairHierarchy relies on this to clear a
+// reference to a deleted project the same way it clears a dangling one.
 func (ps Projects) Find(id string) (*Project, error) {
 	for _, p := range ps {
-		if p.ID == id {
+		if p.ID == id && p.DeletedAt == nil {
 			return p, nil
 		}
 	}
@@ -335,31 +344,37 @@ func (ps *Projects) Add(name, description string, due, created Date) (*Project, 
 	return project, nil
 }
 
-// Delete removes a project, reporting whether it existed.
+// Delete tombstones a project, reporting whether it existed. It stays
+// in the slice with DeletedAt set rather than being spliced out, so a
+// sync can propagate the deletion to another device instead of
+// silently resurrecting it on the next merge; every listing method
+// below hides tombstoned projects so this is invisible to a caller
+// that never syncs.
 //
 // Its tasks are not deleted; see Tasks.DetachFromProject. Its direct
 // subprojects are re-parented to the deleted project's own parent (or
 // promoted to top-level, if it had none): removing a project folds its
 // children up one level rather than orphaning them.
 func (ps *Projects) Delete(id string) bool {
-	for i, p := range *ps {
-		if p.ID == id {
+	for _, p := range *ps {
+		if p.ID == id && p.DeletedAt == nil {
 			for _, child := range ps.Children(id) {
 				child.ParentID = p.ParentID
 			}
-			*ps = append((*ps)[:i], (*ps)[i+1:]...)
+			now := time.Now()
+			p.DeletedAt = &now
 			return true
 		}
 	}
 	return false
 }
 
-// Children returns the projects directly filed under parentID, in list
-// order. Pass "" for the top-level projects.
+// Children returns the non-deleted projects directly filed under
+// parentID, in list order. Pass "" for the top-level projects.
 func (ps Projects) Children(parentID string) Projects {
 	var out Projects
 	for _, p := range ps {
-		if p.ParentID == parentID {
+		if p.ParentID == parentID && p.DeletedAt == nil {
 			out = append(out, p)
 		}
 	}
@@ -465,7 +480,7 @@ func (ps Projects) repairHierarchy() {
 
 // Move reorders a project by delta positions, clamping at the ends.
 func (ps Projects) Move(id string, delta int) (int, error) {
-	return move(ps, delta, func(i int) bool { return ps[i].ID == id },
+	return move(ps, delta, func(i int) bool { return ps[i].ID == id && ps[i].DeletedAt == nil },
 		func(from, to int) {
 			item := ps[from]
 			copyShift(ps, from, to)
@@ -473,35 +488,40 @@ func (ps Projects) Move(id string, delta int) (int, error) {
 		})
 }
 
-// WithPriority returns the projects at exactly the given priority
-// level, in list order.
+// WithPriority returns the non-deleted projects at exactly the given
+// priority level, in list order.
 func (ps Projects) WithPriority(p Priority) Projects {
 	var out Projects
 	for _, project := range ps {
-		if project.Priority == p {
+		if project.Priority == p && project.DeletedAt == nil {
 			out = append(out, project)
 		}
 	}
 	return out
 }
 
-// ByPriority returns a copy of the projects ordered highest priority
+// ByPriority returns the non-deleted projects ordered highest priority
 // first. Equal priorities keep their relative order, so `project
 // list` stays predictable rather than shuffling projects that tie —
 // mirrors Tasks.ByPriority, applied per sibling group so it can sort
 // each level of the project tree without disturbing its shape.
 func (ps Projects) ByPriority() Projects {
-	out := make(Projects, len(ps))
-	copy(out, ps)
+	out := make(Projects, 0, len(ps))
+	for _, p := range ps {
+		if p.DeletedAt == nil {
+			out = append(out, p)
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority > out[j].Priority })
 	return out
 }
 
-// Active returns the projects that are neither completed nor on hold.
+// Active returns the non-deleted projects that are neither completed
+// nor on hold.
 func (ps Projects) Active() Projects {
 	var out Projects
 	for _, p := range ps {
-		if p.Status == StatusActive {
+		if p.Status == StatusActive && p.DeletedAt == nil {
 			out = append(out, p)
 		}
 	}
@@ -509,9 +529,13 @@ func (ps Projects) Active() Projects {
 }
 
 // PortfolioStats reports the active and completed counts plus how many
-// projects need attention (overdue or at risk).
+// projects need attention (overdue or at risk). Tombstoned projects are
+// excluded.
 func (ps Projects) PortfolioStats(tasks Tasks, today Date) (active, completed, needAttention int) {
 	for _, p := range ps {
+		if p.DeletedAt != nil {
+			continue
+		}
 		if p.Status == StatusCompleted {
 			completed++
 			continue

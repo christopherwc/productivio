@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Weekday sets, using Monday as 0 through Sunday as 6 — the convention
@@ -46,12 +47,14 @@ const MaxStreakLookbackDays = 3660 // about ten years
 // special cases for daily/weekly/custom keeps the streak maths to one
 // code path.
 type Habit struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Days        []int    `json:"days"`
-	Completions []string `json:"completions"` // ISO dates, sorted
-	Created     Date     `json:"created"`
-	Tags        []string `json:"tags"` // freeform labels, never nil; see Task.Tags
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Days        []int      `json:"days"`
+	Completions []string   `json:"completions"` // ISO dates, sorted
+	Created     Date       `json:"created"`
+	Tags        []string   `json:"tags"`                 // freeform labels, never nil; see Task.Tags
+	UpdatedAt   time.Time  `json:"updated_at"`           // last content change; Store.SaveHabits stamps this
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"` // tombstone; nil means live. See Habits.Delete.
 }
 
 // Habits is the ordered habit list.
@@ -137,6 +140,9 @@ func (h *Habit) normalize() {
 		if h.Created.IsZero() {
 			h.Created = Today()
 		}
+	}
+	if h.UpdatedAt.IsZero() {
+		h.UpdatedAt = h.Created.time()
 	}
 
 	h.Tags = cleanTags(h.Tags)
@@ -340,10 +346,12 @@ func (h *Habit) HasTag(tag string) bool {
 	return false
 }
 
-// Find returns the habit with the given id.
+// Find returns the habit with the given id. A tombstoned habit is
+// treated as not found, matching how deletion behaved before
+// tombstones existed.
 func (hs Habits) Find(id string) (*Habit, error) {
 	for _, h := range hs {
-		if h.ID == id {
+		if h.ID == id && h.DeletedAt == nil {
 			return h, nil
 		}
 	}
@@ -360,11 +368,17 @@ func (hs *Habits) Add(name string, days []int, created Date) (*Habit, error) {
 	return habit, nil
 }
 
-// Delete removes a habit and its history, reporting whether it existed.
+// Delete tombstones a habit, reporting whether it existed. It stays in
+// the slice, history and all, with DeletedAt set rather than being
+// spliced out, so a sync can propagate the deletion to another device
+// instead of silently resurrecting it on the next merge; every listing
+// method below hides tombstoned habits so this is invisible to a
+// caller that never syncs.
 func (hs *Habits) Delete(id string) bool {
-	for i, h := range *hs {
-		if h.ID == id {
-			*hs = append((*hs)[:i], (*hs)[i+1:]...)
+	for _, h := range *hs {
+		if h.ID == id && h.DeletedAt == nil {
+			now := time.Now()
+			h.DeletedAt = &now
 			return true
 		}
 	}
@@ -373,7 +387,7 @@ func (hs *Habits) Delete(id string) bool {
 
 // Move reorders a habit by delta positions, clamping at the ends.
 func (hs Habits) Move(id string, delta int) (int, error) {
-	return move(hs, delta, func(i int) bool { return hs[i].ID == id },
+	return move(hs, delta, func(i int) bool { return hs[i].ID == id && hs[i].DeletedAt == nil },
 		func(from, to int) {
 			item := hs[from]
 			copyShift(hs, from, to)
@@ -381,34 +395,39 @@ func (hs Habits) Move(id string, delta int) (int, error) {
 		})
 }
 
-// WithTag returns the habits carrying a tag, in list order.
+// WithTag returns the non-deleted habits carrying a tag, in list order.
 func (hs Habits) WithTag(tag string) Habits {
 	var out Habits
 	for _, h := range hs {
-		if h.HasTag(tag) {
+		if h.DeletedAt == nil && h.HasTag(tag) {
 			out = append(out, h)
 		}
 	}
 	return out
 }
 
-// ByCurrentStreak returns a copy of the habits ordered by longest
+// ByCurrentStreak returns the non-deleted habits ordered by longest
 // current streak first. Ties keep their relative list order, so the
 // report stays predictable rather than shuffling habits that tie.
 func (hs Habits) ByCurrentStreak(today Date) Habits {
-	out := make(Habits, len(hs))
-	copy(out, hs)
+	out := make(Habits, 0, len(hs))
+	for _, h := range hs {
+		if h.DeletedAt == nil {
+			out = append(out, h)
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].CurrentStreak(today) > out[j].CurrentStreak(today)
 	})
 	return out
 }
 
-// Due returns the habits scheduled for a day that are not yet done.
+// Due returns the non-deleted habits scheduled for a day that are not
+// yet done.
 func (hs Habits) Due(day Date) Habits {
 	var out Habits
 	for _, h := range hs {
-		if h.IsScheduled(day) && !h.IsDone(day) {
+		if h.DeletedAt == nil && h.IsScheduled(day) && !h.IsDone(day) {
 			out = append(out, h)
 		}
 	}
@@ -416,10 +435,10 @@ func (hs Habits) Due(day Date) Habits {
 }
 
 // Stats reports how many habits are scheduled for a day and how many of
-// those are already kept.
+// those are already kept. Tombstoned habits are excluded.
 func (hs Habits) Stats(day Date) (scheduled, completed int) {
 	for _, h := range hs {
-		if !h.IsScheduled(day) {
+		if h.DeletedAt != nil || !h.IsScheduled(day) {
 			continue
 		}
 		scheduled++
